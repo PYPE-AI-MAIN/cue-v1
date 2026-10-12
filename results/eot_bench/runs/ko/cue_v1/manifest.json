@@ -1,0 +1,28 @@
+{
+  "harness_version": "0.1.0",
+  "span_set_id": "fece5f7c73b7",
+  "model_run_id": "shortwire_cue_v1_finetuned",
+  "adapter": "bench/eot/cue.py",
+  "adapter_id": "shortwire/cue-v1-finetuned",
+  "display_name": "Shortwire Cue v1 (fine-tuned)",
+  "inference_interval": 0.1,
+  "transcript_lag": 0.5,
+  "score_point": null,
+  "language": "ko",
+  "n_rows": 7171,
+  "n_spans": 841,
+  "dataset": {
+    "path": "livekit/eot-bench-data",
+    "split": "validation",
+    "min_silence_span": 0.1,
+    "language": "ko"
+  },
+  "model": {
+    "adapter_id": "shortwire/cue-v1-finetuned",
+    "display_name": "Shortwire Cue v1 (fine-tuned)",
+    "inference_interval": 0.1,
+    "transcript_lag": 0.5,
+    "score_point": null
+  },
+  "recipe": "shortwire__end_of_turn-bb30ae78__logits_cue+empty0.5 x sqrt(pipecat-ai__smart-turn-v3-smart-turn-v3.2-gpu)"
+}

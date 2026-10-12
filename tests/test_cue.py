@@ -1,7 +1,7 @@
 """The prompts are rendered byte for byte as on the benchmarks and in training, and answers are read correctly.
 
 tests/fixtures/rendered.json was written by Shortwire's own renderer; the version hashes are the ones in every
-benchmark run's name (bb30ae78 on eot-bench, ac05ea9a on TurnBench, d498d7e0 in training).
+benchmark run's name (bb30ae78 on eot-bench, ac05ea9a on the two-person benchmark, d498d7e0 in training).
 """
 import json
 import math

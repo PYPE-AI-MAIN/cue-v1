@@ -1,0 +1,28 @@
+{
+  "harness_version": "0.1.0",
+  "span_set_id": "04bccce31c24",
+  "model_run_id": "cue_v1_on_base_gemma",
+  "adapter": "bench/eot/cue.py",
+  "adapter_id": "shortwire/cue-v1-gemma",
+  "display_name": "Cue v1 on the base Gemma (comparison)",
+  "inference_interval": 0.1,
+  "transcript_lag": 0.5,
+  "score_point": null,
+  "language": "pt",
+  "n_rows": 9311,
+  "n_spans": 1143,
+  "dataset": {
+    "path": "livekit/eot-bench-data",
+    "split": "validation",
+    "min_silence_span": 0.1,
+    "language": "pt"
+  },
+  "model": {
+    "adapter_id": "shortwire/cue-v1-gemma",
+    "display_name": "Cue v1 on the base Gemma (comparison)",
+    "inference_interval": 0.1,
+    "transcript_lag": 0.5,
+    "score_point": null
+  },
+  "recipe": "shortwire__end_of_turn-bb30ae78__logits_gemma+empty0.5 x sqrt(pipecat-ai__smart-turn-v3-smart-turn-v3.2-gpu)"
+}

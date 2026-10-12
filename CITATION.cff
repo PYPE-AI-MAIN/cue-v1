@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use Cue v1, please cite it as below."
+title: "Cue v1: turn detection from context and audio, with a fine-tuned decision model"
+authors:
+  - name: "Pype"
+date-released: 2026-10-12
+version: "1.0.0"
+license: Apache-2.0
+url: "https://huggingface.co/Pype/cue-v1"
+repository-code: "https://github.com/PYPE-AI-MAIN/cue-v1"
+abstract: >-
+  Cue v1 combines the logits of Gemma 4 E4B, fine-tuned on turn-taking decisions (DONE, LIKELY_DONE, MID_THOUGHT,
+  HOLDING; STOP or CONTINUE for interruptions), with Smart Turn v3.2's audio score as p_end x sqrt(p_voice).
+  Evaluated on LiveKit's eot-bench in 14 languages.
+keywords:
+  - end-of-turn
+  - turn-taking
+  - voice-agents
+  - decision-model
