@@ -1,0 +1,118 @@
+[
+ {
+  "decision": "prompts/end_of_turn_phone.json",
+  "version": "bb30ae78",
+  "inputs": {
+   "agent_question": "What's the best number to reach you on?",
+   "caller_earlier": "",
+   "caller_text": "Sure, it's nine eight four five,",
+   "transcript_end": "no sentence end"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "The caller has paused on a phone call with an agent. Is it the agent's turn now? The caller is done once they have asked their question, made their request, or answered what the agent asked (even in a different form than asked: a name, a date, a code read out), in a complete sentence. They are not done if the last words leave the sentence hanging, if they are partway through reading out a number, or if they have only greeted, given their name or set the scene without yet saying what they want. How the transcript ends is given below: a question mark almost always means they are done; no sentence end usually means more is coming.\n\nOptions:\nA: finished: they asked a question, made a request, answered the agent, or confirmed or declined, in a complete sentence. Reply now\nB: probably finished: a complete answer or statement that might still get one more sentence\nC: not finished: the sentence is left hanging (it stops on 'and', 'the', 'with', 'for', a repeated word, or a noun that needs more), a number is only partly read out, or they have only greeted, given their name or the background, without yet saying what they want. They will continue\nD: telling something long, a story or an explanation: a pause is them thinking. They will continue\n\nAnswer with exactly one letter.\n\nExamples:\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Hi, this is Priya.\ntranscript_end: a full stop\nAnswer: C\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Hello, I booked a room with you last week and I need to change the dates.\ntranscript_end: a full stop\nAnswer: A\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Is there a slot on Friday morning?\ntranscript_end: a question mark\nAnswer: A\n\nAgent asked: What is your booking reference?\nCaller earlier: (nothing)\nCaller said: it's K L nine four two two\ntranscript_end: no sentence end\nAnswer: A\n\nAgent asked: What's your phone number?\nCaller earlier: (nothing)\nCaller said: sure, it's three one two, five five\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Anything else with the pizza?\nCaller earlier: (nothing)\nCaller said: yes, can I get that with extra\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Which city are you in?\nCaller earlier: (nothing)\nCaller said: I stay in Pune but\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Does that sound right?\nCaller earlier: (nothing)\nCaller said: Yes, that's right.\ntranscript_end: a full stop\nAnswer: A\n\nAgent asked: (nothing)\nCaller earlier: (nothing)\nCaller said: yeah it was fine I guess\ntranscript_end: no sentence end\nAnswer: B\n\nAgent asked: (nothing)\nCaller earlier: can I tell you what happened last year?\nCaller said: So in March my father was admitted to the hospital.\ntranscript_end: a full stop\nAnswer: D\n\nAgent asked: Is there anything else I can help with?\nCaller earlier: (nothing)\nCaller said: No, that's all, thank you so much.\ntranscript_end: a full stop\nAnswer: A"
+   },
+   {
+    "role": "user",
+    "content": "Agent asked: What's the best number to reach you on?\nCaller earlier: (nothing)\nCaller said: Sure, it's nine eight four five,\ntranscript_end: no sentence end\nAnswer:"
+   }
+  ]
+ },
+ {
+  "decision": "prompts/end_of_turn_phone.json",
+  "version": "bb30ae78",
+  "inputs": {
+   "agent_question": "",
+   "caller_earlier": "Hi, this is Priya.",
+   "caller_text": "I wanted to move my appointment to Friday.",
+   "transcript_end": "a full stop"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "The caller has paused on a phone call with an agent. Is it the agent's turn now? The caller is done once they have asked their question, made their request, or answered what the agent asked (even in a different form than asked: a name, a date, a code read out), in a complete sentence. They are not done if the last words leave the sentence hanging, if they are partway through reading out a number, or if they have only greeted, given their name or set the scene without yet saying what they want. How the transcript ends is given below: a question mark almost always means they are done; no sentence end usually means more is coming.\n\nOptions:\nA: finished: they asked a question, made a request, answered the agent, or confirmed or declined, in a complete sentence. Reply now\nB: probably finished: a complete answer or statement that might still get one more sentence\nC: not finished: the sentence is left hanging (it stops on 'and', 'the', 'with', 'for', a repeated word, or a noun that needs more), a number is only partly read out, or they have only greeted, given their name or the background, without yet saying what they want. They will continue\nD: telling something long, a story or an explanation: a pause is them thinking. They will continue\n\nAnswer with exactly one letter.\n\nExamples:\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Hi, this is Priya.\ntranscript_end: a full stop\nAnswer: C\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Hello, I booked a room with you last week and I need to change the dates.\ntranscript_end: a full stop\nAnswer: A\n\nAgent asked: How can I help you today?\nCaller earlier: (nothing)\nCaller said: Is there a slot on Friday morning?\ntranscript_end: a question mark\nAnswer: A\n\nAgent asked: What is your booking reference?\nCaller earlier: (nothing)\nCaller said: it's K L nine four two two\ntranscript_end: no sentence end\nAnswer: A\n\nAgent asked: What's your phone number?\nCaller earlier: (nothing)\nCaller said: sure, it's three one two, five five\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Anything else with the pizza?\nCaller earlier: (nothing)\nCaller said: yes, can I get that with extra\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Which city are you in?\nCaller earlier: (nothing)\nCaller said: I stay in Pune but\ntranscript_end: no sentence end\nAnswer: C\n\nAgent asked: Does that sound right?\nCaller earlier: (nothing)\nCaller said: Yes, that's right.\ntranscript_end: a full stop\nAnswer: A\n\nAgent asked: (nothing)\nCaller earlier: (nothing)\nCaller said: yeah it was fine I guess\ntranscript_end: no sentence end\nAnswer: B\n\nAgent asked: (nothing)\nCaller earlier: can I tell you what happened last year?\nCaller said: So in March my father was admitted to the hospital.\ntranscript_end: a full stop\nAnswer: D\n\nAgent asked: Is there anything else I can help with?\nCaller earlier: (nothing)\nCaller said: No, that's all, thank you so much.\ntranscript_end: a full stop\nAnswer: A"
+   },
+   {
+    "role": "user",
+    "content": "Agent asked: (nothing)\nCaller earlier: Hi, this is Priya.\nCaller said: I wanted to move my appointment to Friday.\ntranscript_end: a full stop\nAnswer:"
+   }
+  ]
+ },
+ {
+  "decision": "prompts/end_of_turn_dialogue.json",
+  "version": "ac05ea9a",
+  "inputs": {
+   "Other person last said": "So how was the trip?",
+   "Speaker said": "It was great, we started in Lisbon and then",
+   "Speaker's words end with": "no sentence end"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "Two people are talking. The speaker has just paused. Is it the other person's turn now? The speaker is done once they have finished their sentence and their point: answered or asked something, made their point, or reacted to what the other person said. They are not done if the last words leave the sentence hanging, if they are partway through a list, a story or an explanation that is clearly going on, or if they have only set up what they are about to say. How the speaker's words end is given below: a question mark almost always means they are done; no sentence end usually means more is coming.\n\nOptions:\nA: finished: they asked something, answered, reacted or made their point, in a complete sentence. The other person can speak now\nB: probably finished: a complete statement that might still get one more sentence\nC: not finished: the sentence is left hanging (it stops on 'and', 'the', 'with', 'because', a repeated word, or a noun that needs more), or they have only set up what they are about to say. They will continue\nD: telling something long, a story or an explanation: a pause is them thinking. They will continue\n\nAnswer with exactly one letter."
+   },
+   {
+    "role": "user",
+    "content": "Other person last said: So how was the trip?\nSpeaker said: It was great, we started in Lisbon and then\nSpeaker's words end with: no sentence end\nAnswer:"
+   }
+  ]
+ },
+ {
+  "decision": "prompts/barge_in.json",
+  "version": "2dc9013b",
+  "inputs": {
+   "agent_said": "Your appointment is on Tuesday at ten",
+   "agent_question": "",
+   "caller_text": "wait, Tuesday doesn't work"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "The agent is speaking on a phone call and the caller just said something over her. Should she stop?\n\nOptions:\nA: a real interruption: a question, request, objection, correction, 'wait', 'hello?', or a full answer to her question\nB: only listening or not for her: 'hmm', 'haan', 'ji', 'okay', 'achha', laughter, noise, a fragment\n\nAnswer with exactly one letter."
+   },
+   {
+    "role": "user",
+    "content": "Agent is saying: Your appointment is on Tuesday at ten\nAgent asked: (nothing)\nCaller said: wait, Tuesday doesn't work\nAnswer:"
+   }
+  ]
+ },
+ {
+  "decision": "prompts/barge_in.json",
+  "version": "2dc9013b",
+  "inputs": {
+   "agent_said": "Your appointment is on Tuesday at ten",
+   "agent_question": "",
+   "caller_text": "hmm"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "The agent is speaking on a phone call and the caller just said something over her. Should she stop?\n\nOptions:\nA: a real interruption: a question, request, objection, correction, 'wait', 'hello?', or a full answer to her question\nB: only listening or not for her: 'hmm', 'haan', 'ji', 'okay', 'achha', laughter, noise, a fragment\n\nAnswer with exactly one letter."
+   },
+   {
+    "role": "user",
+    "content": "Agent is saying: Your appointment is on Tuesday at ten\nAgent asked: (nothing)\nCaller said: hmm\nAnswer:"
+   }
+  ]
+ },
+ {
+  "decision": "training/prompts/end_of_turn_production.json",
+  "version": "d498d7e0",
+  "inputs": {
+   "agent_question": "And your date of birth?",
+   "caller_earlier": "",
+   "caller_text": "it's the twelfth of"
+  },
+  "messages": [
+   {
+    "role": "system",
+    "content": "The caller has paused on a phone call. Where are they in their turn?\n\nOptions:\nA: finished: an answer, a question, a complete statement. Reply now\nB: probably finished, but it trails off; a short grace is enough\nC: mid-sentence or mid-list: a trailing 'and', 'so', 'lekin', 'my number is', 'let me think', half a number. They will continue\nD: telling something long, a story or an explanation, or asked not to be interrupted: a pause is them thinking\n\nAnswer with exactly one letter."
+   },
+   {
+    "role": "user",
+    "content": "Agent asked: And your date of birth?\nCaller earlier: (nothing)\nCaller said: it's the twelfth of\nAnswer:"
+   }
+  ]
+ }
+]

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+*.gguf
+eval/eot_bench/out/
+training/*.jsonl
+cue-v1/
+cue-v1-merged/
+.DS_Store

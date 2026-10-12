@@ -1,0 +1,24 @@
+{
+ "name": "barge_in",
+ "clock": "partial",
+ "priority": 1,
+ "instruction": "The agent is speaking on a phone call and the caller just said something over her. Should she stop?",
+ "options": [
+  {
+   "id": "STOP",
+   "describe": "a real interruption: a question, request, objection, correction, 'wait', 'hello?', or a full answer to her question"
+  },
+  {
+   "id": "CONTINUE",
+   "describe": "only listening or not for her: 'hmm', 'haan', 'ji', 'okay', 'achha', laughter, noise, a fragment"
+  }
+ ],
+ "inputs": [
+  "agent_said",
+  "agent_question",
+  "caller_text"
+ ],
+ "examples": [],
+ "deadline_ms": 400,
+ "default": "CONTINUE"
+}

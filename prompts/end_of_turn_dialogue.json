@@ -1,0 +1,32 @@
+{
+ "name": "end_of_turn",
+ "clock": "pause",
+ "priority": 2,
+ "instruction": "Two people are talking. The speaker has just paused. Is it the other person's turn now? The speaker is done once they have finished their sentence and their point: answered or asked something, made their point, or reacted to what the other person said. They are not done if the last words leave the sentence hanging, if they are partway through a list, a story or an explanation that is clearly going on, or if they have only set up what they are about to say. How the speaker's words end is given below: a question mark almost always means they are done; no sentence end usually means more is coming.",
+ "options": [
+  {
+   "id": "DONE",
+   "describe": "finished: they asked something, answered, reacted or made their point, in a complete sentence. The other person can speak now"
+  },
+  {
+   "id": "LIKELY_DONE",
+   "describe": "probably finished: a complete statement that might still get one more sentence"
+  },
+  {
+   "id": "MID_THOUGHT",
+   "describe": "not finished: the sentence is left hanging (it stops on 'and', 'the', 'with', 'because', a repeated word, or a noun that needs more), or they have only set up what they are about to say. They will continue"
+  },
+  {
+   "id": "HOLDING",
+   "describe": "telling something long, a story or an explanation: a pause is them thinking. They will continue"
+  }
+ ],
+ "inputs": [
+  "Other person last said",
+  "Speaker said",
+  "Speaker's words end with"
+ ],
+ "examples": [],
+ "deadline_ms": 400,
+ "default": "DONE"
+}

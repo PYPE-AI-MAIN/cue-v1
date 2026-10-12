@@ -1,0 +1,8 @@
+Cue v1
+Copyright 2026 Pype
+
+This model is a fine-tune of Gemma 4 E4B (google/gemma-4-E4B-it) by Google, used under the Apache License,
+Version 2.0. Cue v1's weights, adapter, prompts and documentation are released under the same licence.
+
+The benchmark results in this repository were produced with LiveKit's eot-bench harness. The "× √Smart Turn
+v3.2" setup refers to Smart Turn v3.2 by Pipecat (BSD 2-Clause), which is not included here.
