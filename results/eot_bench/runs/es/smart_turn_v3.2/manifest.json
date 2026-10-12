@@ -1,0 +1,28 @@
+{
+  "harness_version": "0.1.0",
+  "span_set_id": "0d36e9e5e419",
+  "model_run_id": "smart_turn_v3.2",
+  "adapter": "bench/eot/cue.py",
+  "adapter_id": "pype/smart_turn_v3.2",
+  "display_name": "Smart Turn v3.2 (our run)",
+  "inference_interval": 0.1,
+  "transcript_lag": 0.5,
+  "score_point": null,
+  "language": "es",
+  "n_rows": 10475,
+  "n_spans": 1236,
+  "dataset": {
+    "path": "livekit/eot-bench-data",
+    "split": "validation",
+    "min_silence_span": 0.1,
+    "language": "es"
+  },
+  "model": {
+    "adapter_id": "pype/smart_turn_v3.2",
+    "display_name": "Smart Turn v3.2 (our run)",
+    "inference_interval": 0.1,
+    "transcript_lag": 0.5,
+    "score_point": null
+  },
+  "recipe": "pipecat-ai__smart-turn-v3-smart-turn-v3.2-gpu on the same moments: the audio half of Cue v1"
+}

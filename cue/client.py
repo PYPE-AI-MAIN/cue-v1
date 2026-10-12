@@ -95,6 +95,6 @@ def with_voice(probs: dict[str, float], p_voice: float) -> float:
 
 
 def wait(probs: dict[str, float], waits: dict[str, float] = WAITS) -> float:
-    """How long to keep listening in silence, blended by the answer's probabilities (the TurnBench policy)."""
+    """How long to keep listening in silence, blended by the answer's probabilities (the two-person policy)."""
     total = sum(probs.get(o, 0.0) for o in waits) or 1.0
     return sum(probs.get(o, 0.0) * w for o, w in waits.items()) / total

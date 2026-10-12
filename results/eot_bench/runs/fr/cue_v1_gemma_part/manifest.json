@@ -1,0 +1,28 @@
+{
+  "harness_version": "0.1.0",
+  "span_set_id": "026614da4b14",
+  "model_run_id": "cue_v1_gemma_part",
+  "adapter": "bench/eot/cue.py",
+  "adapter_id": "pype/cue_v1_gemma_part",
+  "display_name": "Cue v1, Gemma part only",
+  "inference_interval": 0.1,
+  "transcript_lag": 0.5,
+  "score_point": null,
+  "language": "fr",
+  "n_rows": 9655,
+  "n_spans": 1054,
+  "dataset": {
+    "path": "livekit/eot-bench-data",
+    "split": "validation",
+    "min_silence_span": 0.1,
+    "language": "fr"
+  },
+  "model": {
+    "adapter_id": "pype/cue_v1_gemma_part",
+    "display_name": "Cue v1, Gemma part only",
+    "inference_interval": 0.1,
+    "transcript_lag": 0.5,
+    "score_point": null
+  },
+  "recipe": "shortwire__end_of_turn-bb30ae78__logits_cue+empty0.5 (the fine-tune's p(DONE) + p(LIKELY_DONE), no audio)"
+}
