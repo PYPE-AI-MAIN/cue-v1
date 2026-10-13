@@ -15,8 +15,8 @@ There are two optional additions:
 | [Smart Turn v3.2](#2-add-smart-turn-v32-the-benchmarked-recipe) | Adds how the caller *sounds*: p(done) × √Smart Turn, the recipe Cue v1 is benchmarked with | + an `stt_node` |
 | [Barge-in](#3-let-cue-decide-barge-in) | When the caller speaks over the agent, Cue tells "wait, which doctor?" (stop) from "hmm, okay" (keep talking) | + a `tts_node` |
 
-Everything here is in `cue/livekit.py` and `cue/smart_turn.py`. A complete agent with all three switches is in
-[`examples/livekit_agent.py`](examples/livekit_agent.py).
+Everything is in this folder, a separate package (`cue-livekit`, imported as `cue_livekit`) on top of the Cue client
+in the repo root. A complete agent with all three switches is in [`examples/livekit_agent.py`](examples/livekit_agent.py).
 
 Built and tested on **livekit-agents 1.8.1**. Below, "she" is the agent and "the caller" is the person on the line.
 
@@ -30,15 +30,24 @@ llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
 ```
 
 `-np` is how many questions llama.cpp answers at once. A call has at most two out at a time: an end-of-turn question
-and, with barge-in, a barge-in question. Each takes well under a second, so a few slots serve many calls. The README
-estimates about 20 concurrent calls per T4 ([Speed and cost](RESULTS.md#speed-and-cost)).
+and, with barge-in, a barge-in question. Each takes well under a second, so a few slots serve many calls. The repo's
+README estimates about 20 concurrent calls per T4 ([Speed and cost](../RESULTS.md#speed-and-cost)).
 
-Install the client with the LiveKit extra (`livekit-agents[silero]`, `numpy`, `onnxruntime`, `huggingface_hub`), plus
-the plugins your agent uses (the examples here use OpenAI's):
+Install two packages: the Cue client from the repo root (`cue-turn`), and this folder (`cue-livekit`). This folder's
+package brings `livekit-agents[silero]`, `numpy`, `onnxruntime` and `huggingface_hub`. Add the plugins your agent uses
+(the examples here use OpenAI's). From a clone:
 
 ```bash
-pip install "cue-turn[livekit] @ git+https://github.com/PYPE-AI-MAIN/cue-v1"    # or, from a clone: pip install -e ".[livekit]"
-pip install "livekit-agents[openai]~=1.8"
+git clone https://github.com/PYPE-AI-MAIN/cue-v1 && cd cue-v1
+pip install -e . -e ./livekit "livekit-agents[openai]~=1.8"
+```
+
+Or without a clone:
+
+```bash
+pip install "cue-turn @ git+https://github.com/PYPE-AI-MAIN/cue-v1" \
+            "cue-livekit @ git+https://github.com/PYPE-AI-MAIN/cue-v1#subdirectory=livekit" \
+            "livekit-agents[openai]~=1.8"
 ```
 
 Check the server answers. This should print a p(done) close to 1 for a full phone number:
@@ -46,14 +55,14 @@ Check the server answers. This should print a p(done) close to 1 for a full phon
 ```bash
 python -c "
 from cue import Cue, ending, load, p_end
-from cue.livekit import prompt
+from cue_livekit import prompt
 said = 'It is nine eight four five six seven one two three four.'
 probs = Cue('http://localhost:8090/v1').ask(load(prompt('end_of_turn_phone')), {'agent_question': 'What is your number?',
     'caller_earlier': '', 'caller_text': said, 'transcript_end': ending(said)})
 print(p_end(probs))"
 ```
 
-From a clone, `python examples/quickstart.py` runs a few more.
+From a clone, `python examples/quickstart.py` (in the repo root) runs a few more.
 
 ## 1. Words only: a drop-in turn detector
 
@@ -61,7 +70,7 @@ From a clone, `python examples/quickstart.py` runs a few more.
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import openai, silero
 
-from cue.livekit import CueTurnDetector
+from cue_livekit import CueTurnDetector
 
 
 async def entrypoint(ctx: JobContext) -> None:
@@ -128,7 +137,7 @@ score, p and the time). The last barge-in decision is in `detector.last_barge_in
 ### Options
 
 ```python
-from cue.livekit import CueTurnDetector, prompt
+from cue_livekit import CueTurnDetector, prompt
 
 CueTurnDetector(
     "http://localhost:8090/v1",
@@ -164,8 +173,8 @@ audio). To score turns the same way in LiveKit:
 from livekit.agents import Agent, AgentSession, JobContext, JobProcess, WorkerOptions, cli
 from livekit.plugins import openai, silero
 
-from cue.livekit import CueTurnDetector
-from cue.smart_turn import SmartTurn
+from cue_livekit import CueTurnDetector
+from cue_livekit import SmartTurn
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -352,7 +361,7 @@ answers. It needs the default fixed endpointing mode, and it was checked only on
   - each of the barge-in situations in the table above, a tool's reply, queued speeches, segments and graded waits;
   - resampling 48 kHz stereo audio for Smart Turn.
 
-  Run them with `pip install -e ".[livekit,test]" && pytest`.
+  Run them from the repo root with `pip install -e . -e "./livekit[test]" && pytest livekit/tests`.
 - **Real LiveKit 1.8.1 sessions**, with a scripted LLM and a real-time audio output, one per tricky situation:
   - a tool running after she has spoken;
   - a tool's reply, being written and playing;
@@ -398,7 +407,7 @@ Measure on your own calls before relying on any of them.
 ## Limits
 
 - **LiveKit's turn-detector interface is internal.** It is the `_TurnDetector` protocol in `livekit.agents.voice.turn`.
-  Barge-in also reads which speech a `tts_node` belongs to from LiveKit internals. So the extra pins
+  Barge-in also reads which speech a `tts_node` belongs to from LiveKit internals. So `cue-livekit` pins
   `livekit-agents<1.9` until a newer version is checked.
 - **With barge-in, every speech can be stopped by Cue**, including ones you start with `allow_interruptions=False`.
   A speech that allows interruptions is the opposite problem: LiveKit stops it on sound alone (see section 3).

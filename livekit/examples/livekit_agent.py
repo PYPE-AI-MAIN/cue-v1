@@ -1,9 +1,11 @@
-"""A LiveKit voice agent in which Cue v1 decides when the caller has finished (see LIVEKIT.md).
+"""A LiveKit voice agent in which Cue v1 decides when the caller has finished (see ../README.md).
 
-    pip install -e ".[livekit]" "livekit-agents[openai]~=1.8"
+From the repo root:
+
+    pip install -e . -e ./livekit "livekit-agents[openai]~=1.8"
     huggingface-cli download Pype/cue-v1 cue-v1-q8_0.gguf --local-dir .
     llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
-    OPENAI_API_KEY=... python examples/livekit_agent.py console
+    OPENAI_API_KEY=... python livekit/examples/livekit_agent.py console
 
 Settings (environment):
     CUE_URL          the Cue server (default http://localhost:8090/v1)
@@ -19,12 +21,13 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))     # the cue package, when run from a checkout
+HERE = Path(__file__).resolve().parents[1]                       # run from a clone: cue_livekit, and cue at the root
+sys.path[:0] = [str(HERE), str(HERE.parent)]
 
 from livekit.agents import Agent, AgentSession, JobContext, JobProcess, WorkerOptions, cli  # noqa: E402
 from livekit.plugins import openai, silero  # noqa: E402
 
-from cue.livekit import CueTurnDetector  # noqa: E402
+from cue_livekit import CueTurnDetector  # noqa: E402
 
 CUE_URL = os.getenv("CUE_URL", "http://localhost:8090/v1")
 SMART_TURN = os.getenv("CUE_SMART_TURN") == "1"
@@ -71,7 +74,7 @@ class Assistant(Agent):
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
     if SMART_TURN:
-        from cue.smart_turn import SmartTurn
+        from cue_livekit import SmartTurn
         proc.userdata["smart_turn"] = SmartTurn()                # the model, once per process (downloads it once)
 
 

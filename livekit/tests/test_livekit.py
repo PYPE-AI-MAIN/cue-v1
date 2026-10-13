@@ -12,10 +12,10 @@ import httpx
 import pytest
 
 from cue import load
-from cue.livekit import CueTurnDetector, end_of_turn_inputs, prompt
+from cue_livekit import CueTurnDetector, end_of_turn_inputs, prompt
 
 np = pytest.importorskip("numpy")
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]       # the repo: its prompts/
 PROMPTS = ("end_of_turn_phone", "end_of_turn_dialogue", "barge_in")
 
 
@@ -559,7 +559,7 @@ def test_the_caller_audio_reaches_smart_turn_at_16k_mono_and_passes_through_unch
 
 
 def test_smart_turn_features_have_the_models_shape_and_a_sane_filter_bank():
-    from cue.smart_turn import features, mel_filters
+    from cue_livekit.smart_turn import features, mel_filters
     f = features(np.zeros(16000, dtype=np.float32))
     assert f.shape == (1, 80, 800) and f.dtype == np.float32
     m = mel_filters()
@@ -571,7 +571,7 @@ def test_fresh_shares_the_model_and_not_the_buffer():
     cached = sorted(Path.home().glob(".cache/huggingface/hub/models--pipecat-ai--smart-turn-v3/snapshots/*/*.onnx"))
     if not cached:
         pytest.skip("no Smart Turn model cached")
-    from cue.smart_turn import SmartTurn
+    from cue_livekit.smart_turn import SmartTurn
     a = SmartTurn(cached[0])
     b = a.fresh()
     a.push(np.zeros(1600, dtype=np.int16))

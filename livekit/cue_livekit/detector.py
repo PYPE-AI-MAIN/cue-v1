@@ -8,7 +8,7 @@ replying; otherwise ``min_delay``. CueTurnDetector answers that from Cue v1's en
     session = AgentSession(..., turn_handling={"turn_detection": detector,
                                               "endpointing": {"min_delay": 0.3, "max_delay": 2.0}})
 
-Two optional parts, each a few lines in your Agent (see LIVEKIT.md):
+Two optional parts, each a few lines in your Agent (see README.md in this folder):
 
 - **Smart Turn v3.2 on the caller's audio** (``smart_turn=SmartTurn()``): p(done) x sqrt(Smart Turn), the recipe Cue v1
   is benchmarked with. The detector hears the caller's audio through ``listen_audio`` in your ``stt_node``.
@@ -30,12 +30,13 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterable, AsyncIterator
 
-from .client import Cue, p_end, wait, with_voice
-from .decision import UNPUNCTUATED, Decision, ending, last_question, load
+from cue.client import Cue, p_end, wait, with_voice
+from cue.decision import UNPUNCTUATED, Decision, ending, last_question, load
 
 log = logging.getLogger("cue.livekit")
 
-_PROMPT_DIRS = (Path(__file__).resolve().parent / "prompts", Path(__file__).resolve().parents[1] / "prompts")
+# the prompts: shipped in this package's wheel, or the repo's prompts/ folder when run from a clone
+_PROMPT_DIRS = (Path(__file__).resolve().parent / "prompts", Path(__file__).resolve().parents[2] / "prompts")
 
 # the end-of-turn inputs this adapter fills: the phone prompt's four and the dialogue prompt's three
 PHONE_INPUTS = ("agent_question", "caller_earlier", "caller_text", "transcript_end")
