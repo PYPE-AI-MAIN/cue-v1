@@ -26,24 +26,29 @@ def _letter(token: str) -> str | None:
     return t if len(t) == 1 and t in LETTERS else None
 
 
-def body(decision: Decision, inputs: dict, model: str = "cue") -> dict:
-    return {"model": model, "messages": messages(decision, inputs), "max_tokens": 1, "temperature": 0,
+def _match_option(decision: Decision, token: str, *, direct: bool = False) -> str | None:
+    if direct:
+        return decision.option_for_token(token) or (decision.option_for(_letter(token)) if _letter(token) else None)
+    letter = _letter(token)
+    return decision.option_for(letter) if letter else decision.option_for_token(token)
+
+
+def body(decision: Decision, inputs: dict, model: str = "cue", *, direct: bool = False) -> dict:
+    return {"model": model, "messages": messages(decision, inputs, direct=direct), "max_tokens": 1, "temperature": 0,
             "logprobs": True, "top_logprobs": 20, **NO_THINKING}
 
 
-def read(decision: Decision, response: dict) -> dict[str, float]:
+def read(decision: Decision, response: dict, *, direct: bool = False) -> dict[str, float]:
     """Option probabilities from a chat-completions response."""
     ch = response["choices"][0]
     raw: dict[str, float] = {}
     content = ((ch.get("logprobs") or {}).get("content") or [])
     for tp in (content[0].get("top_logprobs") or []) if content else []:
-        letter = _letter(tp["token"])
-        opt = decision.option_for(letter) if letter else None
+        opt = _match_option(decision, tp["token"], direct=direct)
         if opt:
             raw[opt] = raw.get(opt, 0.0) + math.exp(tp["logprob"])
-    if not raw:                       # no logprobs from this server: fall back to the letter it wrote
-        letter = _letter((ch.get("message") or {}).get("content") or "")
-        opt = decision.option_for(letter) if letter else None
+    if not raw:                       # no logprobs from this server: fall back to the letter/token it wrote
+        opt = _match_option(decision, (ch.get("message") or {}).get("content") or "", direct=direct)
         if opt is None:
             raise ValueError(f"no option letter in the answer to {decision.name}")
         raw = {opt: 1.0}
@@ -53,24 +58,27 @@ def read(decision: Decision, response: dict) -> dict[str, float]:
 
 class Cue:
     def __init__(self, base_url: str = "http://localhost:8090/v1", model: str = "cue", api_key: str = "x",
-                 timeout: float = 30.0) -> None:
+                 timeout: float = 30.0, *, direct: bool = False) -> None:
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model = model
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.timeout = timeout
+        self.direct = direct
         self._async: httpx.AsyncClient | None = None
 
     def ask(self, decision: Decision, inputs: dict) -> dict[str, float]:
-        r = httpx.post(self.url, json=body(decision, inputs, self.model), headers=self.headers, timeout=self.timeout)
+        r = httpx.post(self.url, json=body(decision, inputs, self.model, direct=self.direct),
+                       headers=self.headers, timeout=self.timeout)
         r.raise_for_status()
-        return read(decision, r.json())
+        return read(decision, r.json(), direct=self.direct)
 
     async def aask(self, decision: Decision, inputs: dict) -> dict[str, float]:
         if self._async is None:
             self._async = httpx.AsyncClient(timeout=self.timeout)
-        r = await self._async.post(self.url, json=body(decision, inputs, self.model), headers=self.headers)
+        r = await self._async.post(self.url, json=body(decision, inputs, self.model, direct=self.direct),
+                                   headers=self.headers)
         r.raise_for_status()
-        return read(decision, r.json())
+        return read(decision, r.json(), direct=self.direct)
 
     async def aclose(self) -> None:
         if self._async is not None:

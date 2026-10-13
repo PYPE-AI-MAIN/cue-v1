@@ -1,0 +1,99 @@
+{
+ "name": "end_of_turn_coding",
+ "clock": "pause",
+ "priority": 2,
+ "instruction": "A developer is speaking to an AI coding agent or terminal assistant and has just paused. Is it the agent's turn now? The developer is done once they have given a complete command, asked a technical question, confirmed or rejected an action, or finished specifying the target file, symbol, or parameter. They are not done if the sentence stops on a conjunction, preposition, or keyword ('and', 'in', 'with', 'port', 'function', 'called'), if they are partway through reading out an IPv4 address, port number, file path, or identifier, or if they are thinking through a traceback or multi-step architecture change.",
+ "options": [
+  {
+   "id": "DONE",
+   "describe": "finished: a complete command, technical question, file/test instruction, or crisp confirmation ('ship it', 'run pytest', 'yes, commit that'). Reply or execute now"
+  },
+  {
+   "id": "LIKELY_DONE",
+   "describe": "probably finished: a complete technical statement or instruction that might still get a trailing flag or qualifier"
+  },
+  {
+   "id": "MID_THOUGHT",
+   "describe": "not finished: stops on a hanging word ('and', 'with', 'in', 'port', 'function', 'called', 'slash'), a partial IP address ('192.168.1'), a partial port or version number, or an incomplete file path. They will continue"
+  },
+  {
+   "id": "HOLDING",
+   "describe": "walking through a multi-step architecture design, debugging a stack trace aloud, or pausing to think ('wait, let me check the logs...'). They will continue"
+  }
+ ],
+ "inputs": [
+  "agent_question",
+  "caller_earlier",
+  "caller_text",
+  "transcript_end"
+ ],
+ "examples": [
+  {
+   "inputs": {
+    "agent_question": "Ready for the next step.",
+    "caller_text": "Run pytest on the audio module.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "Should I apply the migration and run the test suite?",
+    "caller_text": "ship it",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "Which host should the client connect to?",
+    "caller_text": "Connect to 192.168.1",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "Which server endpoint should we hit?",
+    "caller_text": "Point it to localhost port",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "Which file should we inspect?",
+    "caller_text": "Open src slash voicefi slash audio slash",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "What would you like to refactor?",
+    "caller_text": "I want to refactor the function called",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "How should we structure the retry logic?",
+    "caller_earlier": "Hold on, let me look at the stack trace first.",
+    "caller_text": "Okay so in client dot py the timeout happens before the backoff.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "HOLDING"
+  },
+  {
+   "inputs": {
+    "agent_question": "What would you like to do?",
+    "caller_text": "Can you check why the WebSocket reconnect test is flaking?",
+    "transcript_end": "a question mark"
+   },
+   "answer": "DONE"
+  }
+ ],
+ "deadline_ms": 400,
+ "default": "DONE"
+}

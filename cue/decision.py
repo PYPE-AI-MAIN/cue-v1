@@ -52,6 +52,20 @@ class Decision:
         i = LETTERS.find(letter)
         return self.options[i].id if 0 <= i < len(self.options) else None
 
+    def option_for_token(self, token: str) -> str | None:
+        """Match an option ID (or unambiguous first-token prefix, e.g. 'MID' -> 'MID_THOUGHT') for direct-token mode."""
+        t = token.strip().strip(".:)(\"'-_").upper()
+        if not t:
+            return None
+        for oid in self.ids:
+            if t == oid.upper():
+                return oid
+        if len(t) >= 2:
+            matches = [oid for oid in self.ids if oid.upper().startswith(t) or t.startswith(oid.upper())]
+            if len(matches) == 1:
+                return matches[0]
+        return None
+
 
 def version_of(d: dict) -> str:
     keep = {k: d.get(k) for k in ("instruction", "options", "inputs", "examples", "default", "deadline_ms")}
@@ -95,14 +109,19 @@ def inputs_block(decision: Decision, inputs: dict[str, object], *, example: bool
     return "\n".join(lines)
 
 
-def system(decision: Decision) -> str:
+def system(decision: Decision, *, direct: bool = False) -> str:
     parts = [decision.instruction, "", "Options:"]
-    parts += [f"{LETTERS[i]}: {o.describe}" for i, o in enumerate(decision.options)]
-    parts += ["", "Answer with exactly one letter."]
+    if direct:
+        parts += [f"{o.id}: {o.describe}" for o in decision.options]
+        parts += ["", f"Answer with {', '.join(decision.ids[:-1])} or {decision.ids[-1]}."]
+    else:
+        parts += [f"{LETTERS[i]}: {o.describe}" for i, o in enumerate(decision.options)]
+        parts += ["", "Answer with exactly one letter."]
     if decision.examples:
         parts += ["", "Examples:"]
         for ex_inputs, answer in decision.examples:
-            parts += ["", inputs_block(decision, ex_inputs, example=True), f"Answer: {decision.letter(answer)}"]
+            ans_label = answer if direct else decision.letter(answer)
+            parts += ["", inputs_block(decision, ex_inputs, example=True), f"Answer: {ans_label}"]
     return "\n".join(parts)
 
 
@@ -110,9 +129,10 @@ def user(decision: Decision, inputs: dict[str, object]) -> str:
     return inputs_block(decision, inputs) + "\nAnswer:"
 
 
-def messages(decision: Decision, inputs: dict[str, object]) -> list[dict[str, str]]:
-    """The chat messages for one question: send these, read the first token's option letters."""
-    return [{"role": "system", "content": system(decision)}, {"role": "user", "content": user(decision, inputs)}]
+def messages(decision: Decision, inputs: dict[str, object], *, direct: bool = False) -> list[dict[str, str]]:
+    """The chat messages for one question: send these, read the first token's option letters (or option IDs if direct=True)."""
+    return [{"role": "system", "content": system(decision, direct=direct)},
+            {"role": "user", "content": user(decision, inputs)}]
 
 
 # --- helpers for building inputs -------------------------------------------------------------------------------
