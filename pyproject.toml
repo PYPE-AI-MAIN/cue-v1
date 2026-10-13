@@ -10,6 +10,8 @@ dependencies = ["httpx>=0.27"]
 [project.optional-dependencies]
 eval = ["pandas", "pyarrow", "huggingface_hub", "python-dotenv", "matplotlib"]
 train = ["unsloth", "trl", "datasets"]
+# CueTurnDetector (cue.livekit) and Smart Turn v3.2 on CPU (cue.smart_turn); see LIVEKIT.md
+livekit = ["livekit-agents[silero]>=1.8.1,<1.9", "numpy", "onnxruntime", "huggingface_hub"]
 test = ["pytest"]
 
 [project.urls]
@@ -21,3 +23,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cue"]
+
+# the prompts ship inside the package too, so cue.livekit.prompt() finds them in an installed wheel
+[tool.hatch.build.targets.wheel.force-include]
+"prompts" = "cue/prompts"

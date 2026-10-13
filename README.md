@@ -11,8 +11,9 @@ one English prompt across 14 languages: **4th in English · 1st in Portuguese ·
   for llama.cpp, and the LoRA adapter
 - **The voice part:** Smart Turn v3.2 by Pipecat (BSD-2), not included:
   [pipecat-ai/smart-turn-v3](https://huggingface.co/pipecat-ai/smart-turn-v3)
-- **This repo:** a small client, the prompts, every benchmark prediction with a script that checks our numbers with
-  LiveKit's own harness, the full analysis in [`RESULTS.md`](RESULTS.md), and the training recipe
+- **This repo:** a small client, a LiveKit turn detector ([`LIVEKIT.md`](LIVEKIT.md)), the prompts, every benchmark
+  prediction with a script that checks our numbers with LiveKit's own harness, the full analysis in
+  [`RESULTS.md`](RESULTS.md), and the training recipe
 - **Works best with [Shortwire](#part-of-shortwire).** We'll share more details soon.
 
 ![Cue v1 on eot-bench, English](assets/cue-v1-english.png)
@@ -100,6 +101,21 @@ wait(probs)                # two people talking: seconds of silence to wait, ble
   adding Smart Turn made it slightly worse.
 - **Interruptions:** ask `prompts/barge_in.json` with what the agent is saying and the caller's words; stop when
   p(STOP) ≥ 0.5, and ask again as more words arrive.
+
+## Use it in LiveKit
+
+Cue v1 drops into a [LiveKit Agents](https://github.com/livekit/agents) voice agent as its turn detector:
+
+```python
+from cue.livekit import CueTurnDetector
+
+session = AgentSession(..., turn_handling={"turn_detection": CueTurnDetector("http://localhost:8090/v1"),
+                                           "endpointing": {"min_delay": 0.3, "max_delay": 2.0}})
+```
+
+Optionally, it also adds Smart Turn v3.2 on the caller's audio (the benchmarked recipe) and lets Cue decide
+barge-in ("wait, which doctor?" stops her, "hmm" doesn't). The guide, with code for each: **[LIVEKIT.md](LIVEKIT.md)**.
+A complete agent: [`examples/livekit_agent.py`](examples/livekit_agent.py).
 
 ## Prompts
 
