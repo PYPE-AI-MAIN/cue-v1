@@ -12,7 +12,7 @@
 [![LiveKit Agents 1.7 to 1.8](https://img.shields.io/badge/LiveKit_Agents-1.7_to_1.8-1b1b1a?style=flat-square)](livekit-integration/README.md)
 [![eot-bench: 4th in English, 1st in Portuguese](https://img.shields.io/badge/eot--bench-4th_English,_1st_Portuguese-2f9e6e?style=flat-square)](#benchmarks)
 
-**[Model on Hugging Face](https://huggingface.co/Pype/cue-v1) · [Watch the demo](#watch-it-on-a-live-call) · [Benchmarks](#benchmarks) · [LiveKit guide](livekit-integration/README.md)**
+**[Model on Hugging Face](https://huggingface.co/Pype/cue-v1) · [Watch the demo](#watch-it-live-collect-a-phone-number) · [Benchmarks](#benchmarks) · [LiveKit guide](livekit-integration/README.md)**
 
 [Quick start](#quick-start) · [How Cue works](#how-cue-works) · [Use it in your code](#use-it-in-your-code) · [Use it in LiveKit](#use-it-in-livekit) · [Benchmarks](#benchmarks) · [FAQ](#faq)
 
@@ -43,20 +43,9 @@ audio model, listens to the voice.
 The model is open on Hugging Face ([Pype/cue-v1](https://huggingface.co/Pype/cue-v1), Apache 2.0). This repo gets it
 running and lets you use it: from a terminal, from your own code, or in [LiveKit](livekit-integration/README.md).
 
-## Watch it on a live call
+## Watch it live: collect a phone number
 
 https://github.com/user-attachments/assets/539d41b5-c190-4e3b-91f2-87def836bb1a
-
-A live call in Shortwire, our voice stack, with Cue v1 deciding when the caller's turn ends (38 s; unmute for the
-caller's voice, or [download it](assets/cue-v1-phone-number.mp4)):
-
-1. The agent asks for a mobile number. The caller says "Yeah, so my number is…" and pauses. Cue answers
-   **MID_THOUGHT (0.99)**, so the agent keeps listening instead of replying.
-2. The caller reads out the digits in pieces. Here a separate Shortwire decision takes over: DICTATION, which is not
-   part of Cue, recognises a phone number and holds the turn until it judges the number complete. Cue isn't asked
-   while it does.
-3. The agent reads the number back. "So," comes back MID_THOUGHT, and "That sounds good" comes back **DONE (0.97)**,
-   so the agent replies.
 
 ## Quick start
 
