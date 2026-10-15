@@ -9,6 +9,7 @@ checked from the saved predictions in [`runs/`](runs/) with LiveKit's own harnes
 | `runs/<language>/` | Every run behind the numbers, in the harness's own format: predictions, manifest, metrics |
 | `summary.json`, `report.md` | Cue v1 ranked against every published model, all 14 languages and four views |
 | `verify.py` | Recomputes all of it with LiveKit's harness. No GPU or model needed |
+| `cut_ins.py`, `cut_ins.json` | How often the agent cuts in, at the same average reply time (0.6, 0.8 and 1.0 s), on the pauses where the caller wasn't finished: Cue v1, a silence timer and Smart Turn v3.2 |
 | `reproduce/` | Runs the benchmark from scratch against a served Cue v1 |
 | `charts/` | The charts below |
 | `prompts/` | The production prompt that the v5 prompt is compared with under "What helped" |
@@ -17,6 +18,8 @@ checked from the saved predictions in [`runs/`](runs/) with LiveKit's own harnes
 only" below is the fine-tune on its own; "Smart Turn" is Smart Turn v3.2 on its own.
 
 ## Charts
+
+![How often the agent cuts in at the same 0.8 s average reply time](charts/cue-v1-cut-ins.png)
 
 ![Cue v1 on eot-bench, English](charts/cue-v1-english.png)
 
@@ -55,6 +58,16 @@ git clone https://github.com/livekit/eot-bench && pip install -e eot-bench
 python eot-results/verify.py --harness eot-bench
 # ... Cue v1: 4 of 13 in English; 1 of 11 in Portuguese
 # ALL CHECKS PASS
+```
+
+The cut-in chart reads the same predictions at a given average reply time (the leaderboard stops at 300 and 600 ms;
+0.8 s is a common silence wait). A cut-in is counted the way the harness counts a false cut-off: over the pauses where
+the caller wasn't finished. Smart Turn v3.2's numbers come from its published run in the harness's `output/` folder:
+
+```bash
+python eot-results/cut_ins.py --harness eot-bench
+# 0.8 s: silence timer 9.3%, Smart Turn v3.2 6.9%, Cue v1 4.3%  (average of 14 languages)
+# SAME AS cut_ins.json
 ```
 
 ## Reproduce from scratch
@@ -109,7 +122,7 @@ Words are assumed to arrive 0.5 s after they are spoken, for the ASR and the dec
 
 ## English
 
-| | Latency @5% | Latency @10% | Cut-offs @300 ms | Cut-offs @600 ms | AUC |
+| | Latency at 5% | Latency at 10% | Cut-offs at 300 ms | Cut-offs at 600 ms | AUC |
 |---|---|---|---|---|---|
 | LiveKit turn-detector v1 (hosted) | 543 ms | 295 ms | 9.9% | 4.5% | |
 | Baton v1 | 577 ms | 350 ms | 12.3% | 4.8% | |
@@ -138,7 +151,7 @@ the two are close, and at one second they are equal:
 
 Each cell is **Gemma part only → Cue v1**, with Cue v1's rank among the models the benchmark reports for that language.
 
-| Language | Latency @5% (ms) | Latency @10% (ms) | Cut-offs @300 ms | Cut-offs @600 ms |
+| Language | Latency at 5% (ms) | Latency at 10% (ms) | Cut-offs at 300 ms | Cut-offs at 600 ms |
 |---|---|---|---|---|
 | English | 750 → 719 (4th of 13) | 552 → 532 (4th) | 34.0% → 26.8% (4th) | 7.8% → 7.5% (4th) |
 | Portuguese | 800 → **681** (1st of 11) | 583 → 498 (3rd) | 27.4% → 27.7% (3rd) | 9.4% → **6.5%** (2nd) |
