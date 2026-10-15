@@ -144,10 +144,13 @@ To run it without this package, llama-server can fetch the model itself:
 ```bash
 llama-server --hf-repo Pype/cue-v1 --hf-file cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
 # or on an NVIDIA GPU, with Docker (the model is kept in ~/cue-models between runs):
-docker run --rm --gpus all -p 8090:8090 -v ~/cue-models:/models -e LLAMA_CACHE=/models -e HF_HUB_CACHE=/models \
-    ghcr.io/ggml-org/llama.cpp:server-cuda \
+docker run --rm --gpus all -p 127.0.0.1:8090:8090 -v ~/cue-models:/models -e LLAMA_CACHE=/models \
+    -e HF_HUB_CACHE=/models ghcr.io/ggml-org/llama.cpp:server-cuda \
     --hf-repo Pype/cue-v1 --hf-file cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --host 0.0.0.0 --port 8090
 ```
+
+The Docker line answers only this machine. To serve others, publish `-p 8090:8090` and add `-e LLAMA_API_KEY=...`;
+clients then pass the key.
 
 Any OpenAI-compatible server that returns `logprobs` works too, such as vLLM: point `Cue` at its URL with the model
 name it serves, `Cue(url, model="...")`. llama-server ignores the name.
@@ -166,9 +169,14 @@ The prompts are part of the model, and they ship inside the package (`cue/prompt
 | `barge_in` | `barge_in` | Interruptions: STOP or CONTINUE while the agent is speaking |
 
 Each is a JSON decision: an instruction, the options and what they mean, the inputs it reads, and worked examples.
-`messages(load("end_of_turn_phone"), inputs)` (both from `cue`) renders it exactly as Cue v1 was trained and
-benchmarked; `tests/` check this byte for byte. To ask with your own variant, pass it to the client from above:
-`cue.ask(load("my_prompt.json"), inputs)`.
+`messages(decision, inputs)` renders it exactly as Cue v1 was trained and benchmarked; `tests/` check this byte for
+byte. To ask with your own variant of the phone prompt, keep its input names and build them the same way:
+
+```python
+from cue import end_of_turn_inputs, load
+
+probs = cue.ask(load("my_prompt.json"), end_of_turn_inputs(words, agent_said=last_agent_message))
+```
 
 ## Results
 
@@ -182,7 +190,8 @@ own harness:
 | Smart Turn v3.2 | 1,051 ms | 739 ms | 35.2% | 14.8% |
 
 Cue v1 is **4th of 13** in English, **1st in Portuguese**, and top 4 in 13 of the 14 languages. LiveKit's hosted model
-still leads everywhere but Portuguese. [`eot-results/`](eot-results/README.md) has the full table:
+is ahead of it everywhere except Portuguese at a 5% cut-off rate, and French and Portuguese at a 600 ms budget.
+[`eot-results/`](eot-results/README.md) has the full table:
 - every language and every view;
 - what helped and what didn't;
 - every saved prediction, with one script that re-checks all the numbers using LiveKit's own harness, with no GPU.
@@ -202,7 +211,9 @@ What it checks, and how to re-run the benchmark from scratch: [`eot-results/`](e
 - **Short objections can pass as backchannels.** "Hmm, actually no" said over the agent comes back CONTINUE (0.94).
 - **Fast budgets.** Under about 600 ms, Cue v1 cuts off more callers than the leaders (26.8% at 300 ms in English).
 - **Needs a speech recogniser and a GPU.** It is not an on-device model.
-- **Trained on English.** The other 13 languages run on the English prompt; Arabic is the weakest (6th).
+- **Trained on English.** The other 13 languages run on the English prompt.
+- **Arabic is the weakest language** (6th at a 5% cut-off rate). There the same recipe on the base Gemma was faster:
+  794 ms against 815 ms.
 - **Trained on simulated conversations.** Measure it on your own calls before relying on its probabilities.
 
 ## Part of Shortwire

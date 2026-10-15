@@ -155,8 +155,9 @@ Each cell is **Gemma part only → Cue v1**, with Cue v1's rank among the models
 | Turkish | 1015 → 1012 (3rd of 9) | 743 → 692 (3rd) | 41.3% → **33.9%** (2nd) | 14.9% → 11.6% (3rd) |
 | Arabic | 829 → 815 (6th of 9) | 685 → 640 (5th) | 51.5% → 39.9% (4th) | 14.8% → 12.4% (4th) |
 
-- **1st in Portuguese** at a 5% cut-off rate (681 ms, ahead of LiveKit v1 and Soniox at 702 ms): the only view in any
-  language where Cue v1 beats LiveKit's hosted model.
+- **1st in Portuguese** at a 5% cut-off rate (681 ms, ahead of LiveKit v1 and Soniox at 702 ms). Cue v1 beats LiveKit's
+  hosted model in three views: that one, and cut-offs at 600 ms in French (5.2% against 5.4%) and Portuguese (6.5%
+  against 7.3%).
 - Top 4 in 13 of 14 languages at the 5% budget. Arabic is the weak spot (6th).
 - Across 14 languages × the 5% and 10% budgets, Cue v1 is faster than OpenAI GPT Realtime 2, VAP and Gradium in 28 of
   28, Smart Turn v3.2 in 26 of 28, ultraVAD and LiveKit v1-mini in 25 of 28, Deepgram Flux in 12 of 18, Soniox in 12 of
@@ -194,8 +195,8 @@ alone is slightly faster at 5%.
 
 The base model almost never answers HOLDING; the fine-tune learned it. On eot-bench, with the v5 prompt and Smart Turn
 both ways, the fine-tune is faster than the base Gemma in 11 of 14 languages at both budgets: Portuguese from 4th to
-1st, Hindi from 7th to 4th, French 698 → 647 ms. It is slower in Dutch (688 → 770 ms at 5%), and at 10% in English
-(502 → 532 ms) and Chinese (606 → 637 ms). In English alone, the fine-tune and a well-prompted base Gemma tie
+1st, Hindi from 7th to 4th, French 698 → 647 ms. At 5% it is slower in Dutch (688 → 770 ms) and Arabic (794 →
+815 ms), and level in Chinese; at 10% it is slower in English (502 → 532 ms) and Chinese (606 → 637 ms). In English alone, the fine-tune and a well-prompted base Gemma tie
 (719 / 532 against 723 / 502 ms). The base-Gemma runs are in `runs/*/cue_v1_on_base_gemma/`.
 
 ## What didn't help
@@ -248,8 +249,9 @@ words arrive.
 
 ## Where Cue v1 still loses
 
-- **LiveKit's hosted model leads** in every language but Portuguese, by about 180 ms at a 5% cut-off rate in English.
+- **LiveKit's hosted model is ahead** in every language except Portuguese at a 5% cut-off rate (and French and
+  Portuguese at 600 ms), by about 180 ms at 5% in English.
 - **Fast budgets.** Under ~600 ms, Cue v1 cuts off more callers than the leaders (26.8% at 300 ms in English).
-- **Arabic** (6th at 5%).
+- **Arabic** (6th at 5%), where the base Gemma with the same recipe was faster (794 against 815 ms).
 - **The Gemma part reads words**, so it needs an ASR; a GPU keeps each decision in time.
 - **Simulated training data.** Real calls are messier; measure on your own calls before relying on the probabilities.

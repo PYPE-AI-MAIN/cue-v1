@@ -5,7 +5,8 @@
     cue ask "Sure, it's nine eight four five," --agent-said "What's the best number to reach you on?"
     cue ask "wait, Tuesday doesn't work" --barge-in --agent-said "Your appointment is on Tuesday at ten"
 
-``demo`` and ``ask`` use the server at --url, or start one for the run if none is running there.
+``demo`` and ``ask`` use the server at --url. Without --url they use http://localhost:8090/v1, and start one there for
+the run if nothing answers.
 """
 from __future__ import annotations
 
@@ -66,17 +67,18 @@ def _show(probs: dict[str, float], *, end_of_turn: bool) -> None:
 def serve_cmd(a: argparse.Namespace) -> int:
     server = Server(port=a.port, host=a.host, model=a.model, parallel=a.parallel, ctx=a.ctx,
                     gpu_layers=a.gpu_layers, llama_server=a.llama_server, api_key=a.api_key)
+
+    def shut(*_: object) -> None:                     # killed (systemd, docker stop, a closed terminal)
+        raise SystemExit(0)                           # start() and the finally below stop the server
+    for name in ("SIGTERM", "SIGHUP"):                # before start(): a kill while the model loads is covered too
+        sig = getattr(signal, name, None)
+        if sig is not None and signal.getsignal(sig) is not signal.SIG_IGN:     # leave nohup's ignore alone
+            signal.signal(sig, shut)
     print("Starting Cue v1 (the first time downloads the model from Hugging Face, about 8 GB)...", file=sys.stderr)
     server.start()
     if server.reused:
         print(f"A server already answers at {server.url}.", flush=True)
         return 0
-
-    def shut(*_: object) -> None:                     # killed (systemd, docker stop, a closed terminal)
-        raise SystemExit(0)
-    for name in ("SIGTERM", "SIGHUP"):
-        if hasattr(signal, name):
-            signal.signal(getattr(signal, name), shut)
     print(f"Cue v1 is serving at {server.url}  (log: {server.log_path}). Ctrl-C to stop.", flush=True)
     try:
         return server.wait()

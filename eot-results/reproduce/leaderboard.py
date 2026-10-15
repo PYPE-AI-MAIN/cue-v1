@@ -7,7 +7,7 @@ p_words is Cue v1's end-of-turn answer (DONE + LIKELY_DONE); p_voice is Smart Tu
 moments. The square root makes the voice count half as much as the words (log p = log p_words + 0.5 log p_voice);
 chosen once on 150 English development turns, then fixed for every turn and language.
 
-    python eot-results/reproduce/leaderboard.py --harness ../eot-bench
+    python eot-results/reproduce/leaderboard.py --harness eot-bench
     # -> eot-results/reproduce/out/leaderboard/<span set>/language_comparison/ (report.md, summary.json, heatmaps)
 """
 from __future__ import annotations

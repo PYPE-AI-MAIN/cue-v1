@@ -210,7 +210,7 @@ def test_a_port_held_by_something_else_is_refused(llama, tmp_path):
 def test_an_api_key_is_passed_to_llama_server_and_asked_for_when_missing(llama, capsys):
     exe, model = llama
     with Server(port=free_port(), model=model, llama_server=exe, api_key="s3cret") as server:
-        assert server.command(model, str(exe))[-2:] == ["--api-key", "s3cret"]
+        assert "s3cret" not in " ".join(server.command(model, str(exe))), "not on the command line, where ps shows it"
         assert server_mod.probe(server.url) == "needs_key" and server_mod.probe(server.url, api_key="s3cret") == "ready"
         with pytest.raises(SystemExit, match="needs an API key"):
             main(["ask", "hello", "--url", server.url])
@@ -267,6 +267,29 @@ def test_an_interrupted_start_stops_the_server_and_a_failed_download_says_so(lla
     monkeypatch.setattr(server_mod, "download", offline)
     with pytest.raises(RuntimeError, match="could not download Pype/cue-v1"):
         Server(port=free_port(), llama_server=exe).start()
+
+
+def test_a_bad_host_is_its_own_error_and_a_free_port_is_free():
+    with pytest.raises(RuntimeError, match="cannot listen on 10.255.255.1"):
+        server_mod._port_free("10.255.255.1", free_port())
+    assert server_mod._port_free("127.0.0.1", free_port())
+
+
+def test_a_server_that_dies_while_loading_is_not_waited_for(llama):
+    port = free_port()
+    other = start_fake(llama, port, load_s="60")
+    url = f"http://127.0.0.1:{port}/v1"
+    assert server_mod.probe(url) == "loading"
+    other.terminate()
+    other.wait()
+    with pytest.raises(server_mod.ServerGone):
+        server_mod.wait_ready(url, timeout=20)
+    other = start_fake(llama, port, load_s="60")         # and Server.start takes the port over once it is gone
+    import threading
+    threading.Timer(1.0, other.terminate).start()
+    with Server(port=port, model=llama[1], llama_server=llama[0]) as mine:
+        assert not mine.reused and mine.process.poll() is None and server_mod.running(url)
+    other.wait()
 
 
 def test_python_dash_m_cue_runs_the_command(running_server):

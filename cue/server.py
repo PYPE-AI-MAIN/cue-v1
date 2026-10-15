@@ -12,6 +12,7 @@ benchmarked with. Any OpenAI-compatible server that returns logprobs works too: 
 from __future__ import annotations
 
 import atexit
+import errno
 import os
 import shutil
 import socket
@@ -82,27 +83,47 @@ def models(url: str, api_key: str | None = None) -> list[str]:
     return [str(m.get("id") or m.get("name") or m.get("model")) for m in body.get("data") or body.get("models") or []]
 
 
+class ServerGone(RuntimeError):
+    """The server that was loading at an address stopped before it was ready."""
+
+
 def wait_ready(url: str, timeout: float = 900.0, api_key: str | None = None) -> None:
     """Wait for a server that is loading its model."""
     end = time.monotonic() + timeout
+    gone_since: float | None = None
     while time.monotonic() < end:
         state = probe(url, api_key=api_key)
         if state == "ready":
             return
-        if state not in ("loading", "none"):
+        if state == "needs_key":
+            raise RuntimeError(f"the server at {url} needs an API key: pass --api-key or set CUE_API_KEY")
+        if state == "none":                             # it binds before it loads: nothing there means it stopped
+            gone_since = gone_since or time.monotonic()
+            if time.monotonic() - gone_since > 3.0:
+                raise ServerGone(f"the server that was loading at {url} stopped before it was ready")
+        elif state != "loading":
             raise RuntimeError(f"the server at {url} stopped loading: it answered {state}")
+        else:
+            gone_since = None
         time.sleep(1.0)
     raise TimeoutError(f"the server at {url} was still not ready after {timeout:.0f} s")
 
 
 def _port_free(host: str, port: int) -> bool:
+    """Whether llama-server could listen here. It binds with SO_REUSEADDR, so a port left in TIME_WAIT by the last
+    server is free; only a live listener (EADDRINUSE) is not. Any other failure (a host this machine does not have,
+    a mistyped name) is an error of its own."""
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as s:
+        if os.name != "nt":
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind((host, port))
             return True
-        except OSError:
-            return False
+        except OSError as e:
+            if e.errno == errno.EADDRINUSE:
+                return False
+            raise RuntimeError(f"cannot listen on {host}:{port}: {e}") from e
 
 
 class Server:
@@ -131,20 +152,24 @@ class Server:
         return f"http://{f'[{host}]' if ':' in host else host}:{self.port}/v1"
 
     def command(self, model: str | Path, binary: str | None = None) -> list[str]:
-        key = ["--api-key", self.api_key] if self.api_key else []
+        """llama-server's arguments. The API key is not among them: it goes in the environment (LLAMA_API_KEY), where
+        other users of the machine cannot read it with ps."""
         return [binary or find_llama_server(self.llama_server), "-m", str(model), "-c", str(self.ctx),
                 "-np", str(self.parallel), "-ngl", str(self.gpu_layers), "--jinja", "--host", self.host,
-                "--port", str(self.port), *key, *self.args]
+                "--port", str(self.port), *self.args]
 
     def start(self, timeout: float = 600.0) -> Server:
         if self.process is not None and self.process.poll() is None:
             return self                                       # already started by us
         state = probe(self.url, api_key=self.api_key)
         if state in ("ready", "loading"):                     # a server is here already: use it, leave it running
-            if state == "loading":
-                wait_ready(self.url, timeout, self.api_key)
-            self.reused = True
-            return self
+            try:
+                if state == "loading":
+                    wait_ready(self.url, timeout, self.api_key)
+                self.reused = True
+                return self
+            except ServerGone:                                # it died while loading: start our own
+                state = "none"
         if state == "needs_key":
             raise RuntimeError(f"a server at {self.url} wants an API key: pass api_key (--api-key), or use another "
                                "port")
@@ -157,8 +182,9 @@ class Server:
             raise RuntimeError(f"could not download {REPO}/{FILE} from Hugging Face: {e}") from e
         fd, log = tempfile.mkstemp(prefix="cue-llama-server-", suffix=".log")
         self.log_path = Path(log)
+        env = {**os.environ, "LLAMA_API_KEY": self.api_key} if self.api_key else None
         with os.fdopen(fd, "w") as out:
-            self.process = subprocess.Popen(self.command(model, binary), stdout=out, stderr=subprocess.STDOUT)
+            self.process = subprocess.Popen(self.command(model, binary), stdout=out, stderr=subprocess.STDOUT, env=env)
         atexit.register(self.stop)                            # never leave 8 GB loaded behind a crashed program
         health = self.url[: -len("/v1")] + "/health"
         try:

@@ -16,6 +16,7 @@ ap.add_argument("--host", default="127.0.0.1")
 ap.add_argument("--port", type=int, default=8080)
 ap.add_argument("--api-key")
 args, _ = ap.parse_known_args()                      # -c, -np, -ngl, --jinja: accepted as llama-server does
+args.api_key = args.api_key or __import__("os").environ.get("LLAMA_API_KEY")     # llama-server reads both
 try:
     open(args.m).close()
 except OSError:

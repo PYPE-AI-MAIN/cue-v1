@@ -4,10 +4,10 @@
     llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090      # the model, from Hugging Face
 
     # Cue v1's words, all turns, every language (the published runs)
-    python eot-results/reproduce/run.py --harness ../eot-bench --base-url http://localhost:8090/v1 --rows 0 \
+    python eot-results/reproduce/run.py --harness eot-bench --base-url http://localhost:8090/v1 --rows 0 \
         --lang en ar de es fr hi id it ja ko nl pt tr zh
     # Smart Turn v3.2 on the same moments, run by us (the voice half of Cue v1 x sqrt(Smart Turn))
-    python eot-results/reproduce/run.py --harness ../eot-bench --rows 0 --lang en ... \
+    python eot-results/reproduce/run.py --harness eot-bench --rows 0 --lang en ... \
         --reference eot_harness.smart_turn_adapter:SmartTurnAudioAdapter
     # then combine and rank: eot-results/reproduce/leaderboard.py
 
