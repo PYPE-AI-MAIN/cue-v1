@@ -19,7 +19,7 @@ from functools import lru_cache
 
 import httpx
 
-from .decision import LETTERS, UNPUNCTUATED, Decision, ending, last_question, load, messages
+from .decision import LETTERS, UNPUNCTUATED, Decision, ending, last_question, load, messages, prompt
 
 # Gemma 4 thinks before answering unless told not to; both spellings, for llama.cpp and vLLM
 NO_THINKING = {"reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
@@ -115,7 +115,7 @@ class Cue:
 
 @lru_cache(maxsize=None)
 def _decision(name: str) -> Decision:
-    return load(name)
+    return load(prompt(name))
 
 
 def end_of_turn_inputs(caller_text: str, agent_said: str = "", caller_earlier: str = "",

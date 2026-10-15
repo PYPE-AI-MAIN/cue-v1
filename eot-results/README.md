@@ -11,6 +11,7 @@ checked from the saved predictions in [`runs/`](runs/) with LiveKit's own harnes
 | `verify.py` | Recomputes all of it with LiveKit's harness. No GPU or model needed |
 | `reproduce/` | Runs the benchmark from scratch against a served Cue v1 |
 | `charts/` | The charts below |
+| `prompts/` | The production prompt that the v5 prompt is compared with under "What helped" |
 
 **Cue v1 = the fine-tuned Gemma 4 E4B's logits (the words and context) × √Smart Turn v3.2 (the voice).** "Gemma part
 only" below is the fine-tune on its own; "Smart Turn" is Smart Turn v3.2 on its own.
@@ -61,7 +62,8 @@ python eot-results/verify.py --harness eot-bench
 Serve Cue v1 first (`cue serve`, see the [main README](../README.md)), then, from the repo root:
 
 ```bash
-git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e . pandas pyarrow
+git clone https://github.com/livekit/eot-bench
+pip install -e eot-bench -e ".[voice]" pandas pyarrow torch torchaudio transformers   # the last three: Smart Turn's step
 # the Gemma part, every turn of every language
 python eot-results/reproduce/run.py --harness eot-bench --rows 0 --lang en ar de es fr hi id it ja ko nl pt tr zh
 # Smart Turn v3.2 on the same moments
@@ -71,6 +73,7 @@ python eot-results/reproduce/run.py --harness eot-bench --rows 0 --lang en ar de
 python eot-results/reproduce/leaderboard.py --harness eot-bench
 ```
 
+To run another prompt, such as the production one above, add `--decision eot-results/prompts/end_of_turn_production.json`.
 Each run prints its model calls and how many failed. A failed call scores 0, so check that it says `(0 failed)`.
 llama.cpp is not bit-exact when it serves several requests at once: a rerun matches the published scores to within
 about 0.003 on average, which does not move the ranks.
@@ -161,7 +164,8 @@ Each cell is **Gemma part only → Cue v1**, with Cue v1's rank among the models
 
 ## What helped
 
-**1. A careful prompt.** The production end-of-turn prompt (four options, no examples) against the "v5" prompt, which
+**1. A careful prompt.** The production end-of-turn prompt ([`prompts/end_of_turn_production.json`](prompts/end_of_turn_production.json):
+four options, no examples) against the "v5" prompt, which
 spells out what *done* means on a phone call, adds an input for how the transcript ends, and carries 11 worked
 examples. English, Gemma words only:
 

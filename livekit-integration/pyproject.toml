@@ -1,12 +1,12 @@
 [project]
 name = "cue-livekit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cue v1 as a LiveKit Agents turn detector, with Smart Turn v3.2 and Cue's barge-in decision"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 # cue-turn is the Cue package in this repo's root (not on PyPI): install it from the clone or the git URL (README.md)
-dependencies = ["cue-turn[voice]", "livekit-agents[silero]>=1.7.1,<1.9"]
+dependencies = ["cue-turn[voice]>=1.1.0", "livekit-agents[silero]>=1.7.1,<1.9"]
 
 [project.optional-dependencies]
 test = ["pytest"]

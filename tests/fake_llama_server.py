@@ -1,5 +1,6 @@
-"""A stand-in for llama.cpp's llama-server, for the tests: the same flags, /health (503 while "loading", then 200),
-/v1/models, and one-token chat completions with logprobs. It answers MID_THOUGHT when the caller's words hold fewer
+"""A stand-in for llama.cpp's llama-server, for the tests: the same flags, /health and /v1/models (503 on both while
+it "loads", as llama-server answers every endpoint until its model is ready), --api-key, and one-token chat
+completions with logprobs. FAKE_LOAD_S sets the load time (default 0.5 s). It answers MID_THOUGHT when the caller's words hold fewer
 than ten digits, DONE otherwise; STOP when they hold "wait", CONTINUE otherwise. A missing -m model makes it exit 1."""
 import argparse
 import json
@@ -13,13 +14,16 @@ ap = argparse.ArgumentParser()
 ap.add_argument("-m", required=True)
 ap.add_argument("--host", default="127.0.0.1")
 ap.add_argument("--port", type=int, default=8080)
+ap.add_argument("--api-key")
 args, _ = ap.parse_known_args()                      # -c, -np, -ngl, --jinja: accepted as llama-server does
 try:
     open(args.m).close()
 except OSError:
     print(f"E gguf_init_from_file: failed to open GGUF file '{args.m}' (No such file or directory)", flush=True)
     sys.exit(1)
-READY_AT = time.monotonic() + 0.5
+import os  # noqa: E402
+
+READY_AT = time.monotonic() + float(os.environ.get("FAKE_LOAD_S", "0.5"))
 
 
 def answer(system: str, user: str) -> tuple[str, list[str]]:
@@ -43,15 +47,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def gate(self):
+        """503 while loading; 401 without the key (llama-server keeps /health public)."""
+        if time.monotonic() < READY_AT:
+            self.reply(503, {"error": "Loading model"})
+            return False
+        if args.api_key and self.path != "/health" and self.headers.get("Authorization") != f"Bearer {args.api_key}":
+            self.reply(401, {"error": "Invalid API Key"})
+            return False
+        return True
+
     def do_GET(self):
+        if not self.gate():
+            return
         if self.path == "/health":
-            ready = time.monotonic() >= READY_AT
-            return self.reply(200 if ready else 503, {"status": "ok"} if ready else {"error": "Loading model"})
+            return self.reply(200, {"status": "ok"})
         if self.path == "/v1/models":
             return self.reply(200, {"data": [{"id": args.m}]})
         self.reply(404, {})
 
     def do_POST(self):
+        if not self.gate():
+            return
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         system, user = body["messages"][0]["content"], body["messages"][1]["content"]
         letter, letters = answer(system, user)

@@ -94,11 +94,14 @@ def prompt(name: str) -> Path:
 
 
 def load(path_or_name: str | Path) -> Decision:
-    """A decision: a shipped prompt by name ("end_of_turn_phone") or a JSON file of your own. An older path to a
-    shipped prompt ("prompts/end_of_turn_phone.json") still finds it."""
+    """A decision: a shipped prompt by name ("end_of_turn_phone") or a JSON file of your own (any path). The repo's
+    older layout, "prompts/end_of_turn_phone.json", still finds the shipped prompt when no such file exists."""
     path = Path(path_or_name)
-    if not path.exists() and (PROMPTS / f"{path.stem}.json").exists() and path.suffix in ("", ".json"):
-        path = PROMPTS / f"{path.stem}.json"
+    shipped = PROMPTS / f"{path.stem}.json"
+    if isinstance(path_or_name, str) and len(path.parts) == 1 and path.suffix == "" and shipped.exists():
+        path = shipped                                  # a bare name is always the shipped prompt
+    elif not path.exists() and path.parts == ("prompts", f"{path.stem}.json") and shipped.exists():
+        path = shipped
     return parse(json.loads(path.read_text()))
 
 

@@ -2,7 +2,8 @@
 
 Cue v1 reads words, not prosody. On LiveKit's eot-bench it ranks where it does combined with an audio turn model:
 p(done) x sqrt(Smart Turn's score) (``cue.with_voice``). This runs Smart Turn locally on the CPU with onnxruntime and
-numpy: pip install "cue-turn[voice]". The model (BSD-2, by Pipecat) is downloaded from Hugging Face, not shipped here.
+numpy: pip install "cue-turn[voice] @ git+https://github.com/PYPE-AI-MAIN/cue-v1". The model (BSD-2, by Pipecat) is
+downloaded from Hugging Face, not shipped here.
 
     from cue.smart_turn import SmartTurn
     model = SmartTurn()                   # downloads smart-turn-v3.2-cpu.onnx once, or SmartTurn("model.onnx")

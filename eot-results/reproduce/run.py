@@ -1,6 +1,6 @@
 """Score Cue v1 on eot-bench, beside every reference model on the same turns, with the harness's own metrics.
 
-    git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e . pandas pyarrow
+    git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e ".[voice]" pandas pyarrow torch torchaudio transformers
     llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090      # the model, from Hugging Face
 
     # Cue v1's words, all turns, every language (the published runs)

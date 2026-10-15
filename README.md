@@ -33,6 +33,10 @@ brew install llama.cpp          # Cue runs on llama.cpp's llama-server; Linux, N
 cue demo                        # downloads Cue v1 from Hugging Face once (about 8 GB), starts it, asks five questions
 ```
 
+The model is 8 GB, so it needs a GPU with that much free memory: an NVIDIA card such as a T4, or an Apple-silicon Mac,
+which llama.cpp runs on its GPU. It works on a CPU, only slower. The first run downloads the model into the Hugging
+Face cache (`~/.cache/huggingface`); after that, starting takes seconds to a minute while the model loads.
+
 What Cue v1 answers in the demo:
 
 | The agent said | The caller said | Cue v1 |
@@ -84,8 +88,8 @@ Every method has an async twin (`aend_of_turn`, `abarge_in`, `adialogue_end_of_t
 Ask Cue when your speech recogniser gives you the caller's words and they pause, then act on the answer:
 
 - **Caller and agent:** reply when `p_end(probs)` crosses a threshold you tune on your own calls, for the cut-off rate
-  you can accept. For the benchmarked recipe, add Smart Turn v3.2 on the caller's audio (`pip install
-  "cue-turn[voice]"`, it runs on the CPU):
+  you can accept. For the benchmarked recipe, add Smart Turn v3.2 on the caller's audio. It runs on the CPU and needs
+  the `voice` extra: `pip install "cue-turn[voice] @ git+https://github.com/PYPE-AI-MAIN/cue-v1"`.
 
   ```python
   from cue import with_voice
@@ -118,8 +122,16 @@ guide, with code for each: **[livekit-integration/](livekit-integration/README.m
 ## Serve it yourself
 
 `cue serve` and `serve()` download `cue-v1-q8_0.gguf` from Hugging Face once and start llama.cpp's `llama-server`
-with the flags Cue v1 was benchmarked with. Options: `--port`, `--host 0.0.0.0` (to serve other machines),
-`--gpu-layers 0` (CPU only: it works, but slower), `--model` (a local GGUF).
+with the flags Cue v1 was benchmarked with. The options:
+
+| Option | What it does |
+|---|---|
+| `--port` | The port to serve on (default 8090) |
+| `--host 0.0.0.0` | Serve other machines. Use it with `--api-key` (or `CUE_API_KEY`), or behind a firewall: the server has no other protection |
+| `--gpu-layers 0` | CPU only: it works, but slower |
+| `--model` | A local GGUF instead of the download |
+
+Clients pass the same key: `Cue(url, api_key=...)`, or `cue ask --api-key`.
 
 **llama-server** comes from llama.cpp:
 - **macOS:** `brew install llama.cpp`.
@@ -131,12 +143,14 @@ To run it without this package, llama-server can fetch the model itself:
 
 ```bash
 llama-server --hf-repo Pype/cue-v1 --hf-file cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
-# or on an NVIDIA GPU, with Docker:
-docker run --gpus all -p 8090:8090 ghcr.io/ggml-org/llama.cpp:server-cuda \
+# or on an NVIDIA GPU, with Docker (the model is kept in ~/cue-models between runs):
+docker run --rm --gpus all -p 8090:8090 -v ~/cue-models:/models -e LLAMA_CACHE=/models -e HF_HUB_CACHE=/models \
+    ghcr.io/ggml-org/llama.cpp:server-cuda \
     --hf-repo Pype/cue-v1 --hf-file cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --host 0.0.0.0 --port 8090
 ```
 
-Any OpenAI-compatible server that returns `logprobs` works too, such as vLLM: point `Cue` at its URL.
+Any OpenAI-compatible server that returns `logprobs` works too, such as vLLM: point `Cue` at its URL with the model
+name it serves, `Cue(url, model="...")`. llama-server ignores the name.
 
 **Speed.** One NVIDIA T4 answers about 13 decisions a second: 79 ms each one at a time, under 200 ms two at once.
 That is roughly 20 concurrent calls per T4, an estimate ([Speed and cost](eot-results/README.md#speed-and-cost)).
@@ -152,8 +166,9 @@ The prompts are part of the model, and they ship inside the package (`cue/prompt
 | `barge_in` | `barge_in` | Interruptions: STOP or CONTINUE while the agent is speaking |
 
 Each is a JSON decision: an instruction, the options and what they mean, the inputs it reads, and worked examples.
-`cue.messages(decision, inputs)` renders it exactly as Cue v1 was trained and benchmarked; `tests/` check this byte
-for byte. To ask with your own variant, use `cue.ask(cue.load("my_prompt.json"), inputs)`.
+`messages(load("end_of_turn_phone"), inputs)` (both from `cue`) renders it exactly as Cue v1 was trained and
+benchmarked; `tests/` check this byte for byte. To ask with your own variant, pass it to the client from above:
+`cue.ask(load("my_prompt.json"), inputs)`.
 
 ## Results
 
@@ -171,6 +186,15 @@ still leads everywhere but Portuguese. [`eot-results/`](eot-results/README.md) h
 - every language and every view;
 - what helped and what didn't;
 - every saved prediction, with one script that re-checks all the numbers using LiveKit's own harness, with no GPU.
+
+### Check our numbers
+
+```bash
+git clone https://github.com/livekit/eot-bench && pip install -e eot-bench
+python eot-results/verify.py --harness eot-bench      # ALL CHECKS PASS
+```
+
+What it checks, and how to re-run the benchmark from scratch: [`eot-results/`](eot-results/README.md#check-our-numbers).
 
 ## Limits
 

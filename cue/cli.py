@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import sys
+from pathlib import Path
 
 import httpx
 
 from .client import Cue, p_end, wait
-from .server import Server, running
+from .server import Server, models, probe, wait_ready
 
 DEFAULT_URL = "http://localhost:8090/v1"
 
@@ -30,10 +32,24 @@ DEMO_BARGE_IN = ("Your appointment is on Tuesday at ten", ["wait, Tuesday doesn'
 
 def _connect(url: str | None, model: str = "cue", api_key: str | None = None) -> tuple[Cue, Server | None]:
     """A client for the server at url; with no url and nothing at the default, a local server for this run."""
-    if running(url or DEFAULT_URL, api_key=api_key):
-        return Cue(url or DEFAULT_URL, model, api_key or "x"), None
+    target = url or DEFAULT_URL
+    state = probe(target, api_key=api_key)
+    if state == "loading":
+        print(f"The server at {target} is still loading Cue v1: waiting for it...", file=sys.stderr)
+        wait_ready(target, api_key=api_key)
+        state = "ready"
+    if state == "needs_key":
+        raise SystemExit(f"The server at {target} needs an API key: pass --api-key or set CUE_API_KEY.")
+    if state == "ready":
+        served = models(target, api_key)
+        if served and not any("cue" in Path(m).name.lower() for m in served):      # the file or served name
+            print(f"Note: the server at {target} serves {', '.join(served)}, which does not look like Cue v1.",
+                  file=sys.stderr)
+        return Cue(target, model, api_key or "x"), None
     if url:
         raise SystemExit(f"No Cue server answers at {url}.")
+    if state == "other":
+        raise SystemExit(f"Something that is not a Cue server answers at {DEFAULT_URL}: pass --url, or free the port.")
     print(f"No Cue server at {DEFAULT_URL}: starting one for this run (the first time downloads the model, about "
           "8 GB). To ask many questions, run `cue serve` in another terminal.", file=sys.stderr)
     server = Server().start()
@@ -49,18 +65,25 @@ def _show(probs: dict[str, float], *, end_of_turn: bool) -> None:
 
 def serve_cmd(a: argparse.Namespace) -> int:
     server = Server(port=a.port, host=a.host, model=a.model, parallel=a.parallel, ctx=a.ctx,
-                    gpu_layers=a.gpu_layers, llama_server=a.llama_server)
+                    gpu_layers=a.gpu_layers, llama_server=a.llama_server, api_key=a.api_key)
     print("Starting Cue v1 (the first time downloads the model from Hugging Face, about 8 GB)...", file=sys.stderr)
     server.start()
     if server.reused:
-        print(f"A server already answers at {server.url}.")
+        print(f"A server already answers at {server.url}.", flush=True)
         return 0
-    print(f"Cue v1 is serving at {server.url}  (log: {server.log_path}). Ctrl-C to stop.")
+
+    def shut(*_: object) -> None:                     # killed (systemd, docker stop, a closed terminal)
+        raise SystemExit(0)
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), shut)
+    print(f"Cue v1 is serving at {server.url}  (log: {server.log_path}). Ctrl-C to stop.", flush=True)
     try:
         return server.wait()
     except KeyboardInterrupt:
-        server.stop()
         return 0
+    finally:
+        server.stop()                                 # outside the signal handler: never inside a wait on the child
 
 
 def ask_cmd(a: argparse.Namespace) -> int:
@@ -111,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--ctx", type=int, default=8192, help="context tokens, shared by the parallel slots")
     s.add_argument("--gpu-layers", type=int, default=999, help="layers on the GPU; 0 for CPU only")
     s.add_argument("--llama-server", help="the llama-server binary, if not on PATH")
+    s.add_argument("--api-key", default=os.environ.get("CUE_API_KEY"), help="require this key from clients "
+                   "(default: $CUE_API_KEY); use one with --host 0.0.0.0")
     s.set_defaults(fn=serve_cmd)
 
     q = sub.add_parser("ask", help="ask Cue v1 one question")
@@ -135,11 +160,16 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
+    except KeyboardInterrupt:
+        return 130
     except (FileNotFoundError, RuntimeError, TimeoutError) as e:
         print(e, file=sys.stderr)
         return 1
     except httpx.HTTPError as e:
         print(f"The Cue server did not answer: {e!r}", file=sys.stderr)
+        return 1
+    except ValueError as e:                            # no option letter in the answer: not Cue v1 behind that URL?
+        print(f"{e}: is that server serving Cue v1?", file=sys.stderr)
         return 1
 
 

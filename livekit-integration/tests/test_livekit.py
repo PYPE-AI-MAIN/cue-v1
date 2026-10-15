@@ -11,10 +11,10 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from cue import load
-from cue_livekit import CueTurnDetector, end_of_turn_inputs, prompt
+np = pytest.importorskip("numpy")                 # the voice extra (cue_livekit imports Smart Turn); else skip
 
-np = pytest.importorskip("numpy")
+from cue import load  # noqa: E402
+from cue_livekit import CueTurnDetector, end_of_turn_inputs, prompt  # noqa: E402
 PROMPTS = ("end_of_turn_phone", "end_of_turn_dialogue", "barge_in")
 
 

@@ -25,3 +25,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cue"]
+
+[tool.pytest.ini_options]
+# the core package's tests; the LiveKit integration's: pytest livekit-integration/tests
+testpaths = ["tests"]

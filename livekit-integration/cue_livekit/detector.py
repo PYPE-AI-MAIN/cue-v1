@@ -37,7 +37,6 @@ from cue.decision import UNPUNCTUATED, Decision, ending, last_question, load, pr
 
 log = logging.getLogger("cue.livekit")
 
-# the prompts: shipped in this package's wheel, or the repo's prompts/ folder when run from a clone
 # graded waits when Cue's words say the caller is not done: blended over the not-done answers only (1.75 to 2.25 s)
 NOT_DONE_WAITS = {o: WAITS[o] for o in ("MID_THOUGHT", "HOLDING")}
 
