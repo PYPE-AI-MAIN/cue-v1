@@ -1,21 +1,25 @@
-"""Ask Cue v1 a decision through any OpenAI-compatible server that returns logprobs (llama.cpp's llama-server, vLLM).
+"""Ask Cue v1 through any OpenAI-compatible server that returns logprobs (llama.cpp's llama-server, vLLM).
 
 One question is one forward pass and one token: the answer is the first token's probability mass on each option's
 letter, normalised over the options. Nothing is generated beyond that token.
 
-    from cue import Cue, load
+    from cue import Cue
     cue = Cue("http://localhost:8090/v1")
-    eot = load("prompts/end_of_turn_phone.json")
-    probs = cue.ask(eot, {"agent_question": "...", "caller_earlier": "", "caller_text": "...",
-                          "transcript_end": "no sentence end"})
+    cue.end_of_turn("Sure, it's nine eight four five,", agent_said="What's the best number to reach you on?")
+    # {'DONE': 0.0, 'LIKELY_DONE': 0.0, 'MID_THOUGHT': 1.0, 'HOLDING': 0.0}
+    cue.barge_in("wait, Tuesday doesn't work", agent_said="Your appointment is on Tuesday at ten")
+    # {'STOP': 1.0, 'CONTINUE': 0.0}
+
+``cue.ask(decision, inputs)`` asks any decision with its raw inputs.
 """
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import httpx
 
-from .decision import LETTERS, Decision, messages
+from .decision import LETTERS, UNPUNCTUATED, Decision, ending, last_question, load, messages, prompt
 
 # Gemma 4 thinks before answering unless told not to; both spellings, for llama.cpp and vLLM
 NO_THINKING = {"reasoning_effort": "none", "chat_template_kwargs": {"enable_thinking": False}}
@@ -76,6 +80,63 @@ class Cue:
         if self._async is not None:
             await self._async.aclose()
             self._async = None
+
+    # -- the three questions Cue v1 was trained on --------------------------------------------------------------
+    def end_of_turn(self, caller_text: str, *, agent_said: str = "", caller_earlier: str = "",
+                    punctuated: bool = True) -> dict[str, float]:
+        """A caller and an agent: the caller has paused; are they done? DONE, LIKELY_DONE, MID_THOUGHT or HOLDING.
+
+        caller_text: the caller's words this turn. agent_said: the agent's last message before them. caller_earlier:
+        the caller's message before that. punctuated=False if your speech recogniser seldom punctuates the language."""
+        return self.ask(_decision("end_of_turn_phone"),
+                        end_of_turn_inputs(caller_text, agent_said, caller_earlier, punctuated))
+
+    async def aend_of_turn(self, caller_text: str, *, agent_said: str = "", caller_earlier: str = "",
+                           punctuated: bool = True) -> dict[str, float]:
+        return await self.aask(_decision("end_of_turn_phone"),
+                               end_of_turn_inputs(caller_text, agent_said, caller_earlier, punctuated))
+
+    def barge_in(self, caller_text: str, *, agent_said: str = "") -> dict[str, float]:
+        """The caller spoke while the agent was talking: STOP (a real interruption) or CONTINUE (a backchannel)?
+
+        agent_said: what the agent has said so far of her current speech (the part already heard, not the rest)."""
+        return self.ask(_decision("barge_in"), barge_in_inputs(caller_text, agent_said))
+
+    async def abarge_in(self, caller_text: str, *, agent_said: str = "") -> dict[str, float]:
+        return await self.aask(_decision("barge_in"), barge_in_inputs(caller_text, agent_said))
+
+    def dialogue_end_of_turn(self, speaker_text: str, *, other_said: str = "") -> dict[str, float]:
+        """Two people talking: the speaker has paused; are they done? other_said: what the other person said last."""
+        return self.ask(_decision("end_of_turn_dialogue"), dialogue_inputs(speaker_text, other_said))
+
+    async def adialogue_end_of_turn(self, speaker_text: str, *, other_said: str = "") -> dict[str, float]:
+        return await self.aask(_decision("end_of_turn_dialogue"), dialogue_inputs(speaker_text, other_said))
+
+
+@lru_cache(maxsize=None)
+def _decision(name: str) -> Decision:
+    return load(prompt(name))
+
+
+def end_of_turn_inputs(caller_text: str, agent_said: str = "", caller_earlier: str = "",
+                       punctuated: bool = True) -> dict[str, str]:
+    """The phone prompt's inputs, mapped as on eot-bench: the agent's last question (or the end of her message), the
+    caller's previous message, the caller's words, and how the recogniser ended them."""
+    end = ending(caller_text)
+    return {"agent_question": last_question(agent_said) or agent_said.strip()[-200:],
+            "caller_earlier": caller_earlier.strip()[-300:], "caller_text": caller_text.strip(),
+            "transcript_end": UNPUNCTUATED if not punctuated and end == "no sentence end" else end}
+
+
+def barge_in_inputs(caller_text: str, agent_said: str = "") -> dict[str, str]:
+    said = agent_said.strip()[-300:]
+    return {"agent_said": said, "agent_question": last_question(said), "caller_text": caller_text.strip()}
+
+
+def dialogue_inputs(speaker_text: str, other_said: str = "") -> dict[str, str]:
+    """The two-person prompt's inputs, as it was trained."""
+    return {"Other person last said": other_said.strip()[-240:], "Speaker said": speaker_text.strip()[-400:],
+            "Speaker's words end with": ending(speaker_text)}
 
 
 # --- using the answer ------------------------------------------------------------------------------------------

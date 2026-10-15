@@ -1,13 +1,13 @@
 """Check every published eot-bench number from the saved predictions, with LiveKit's own harness and nothing of ours.
 
     git clone https://github.com/livekit/eot-bench && pip install -e eot-bench
-    python results/eot_bench/verify.py --harness eot-bench
+    python eot-results/verify.py --harness eot-bench
 
-1. For every language and every run in results/eot_bench/runs/, the harness's `compute-metrics` is run again on the
+1. For every language and every run in eot-results/runs/, the harness's `compute-metrics` is run again on the
    saved predictions.parquet, and its summary is compared with the committed metrics/summary.json.
 2. Cue v1's predictions are rebuilt from its two halves (the Gemma part × √Smart Turn) and compared.
 3. Cue v1's predictions are placed beside the published reference models from the harness's own output/ folder, and
-   the harness's `compare-languages` ranks them. Its numbers for Cue v1 are compared with results/eot_bench/summary.json.
+   the harness's `compare-languages` ranks them. Its numbers for Cue v1 are compared with eot-results/summary.json.
 
 No GPU and no model are needed: this checks the scoring, from the predictions to every number in the README.
 """
@@ -95,7 +95,7 @@ def main() -> None:
     worst = max(abs(got[m][l][CUE] - published[m][l][CUE]) for m in METRICS for l in published[m]
                 if published[m][l].get(CUE) is not None)
     ok &= worst < 1e-9
-    print(f"   Cue v1 in all 14 languages x 4 views: {'same as results/eot_bench/summary.json' if worst < 1e-9 else f'DIFFERENT (max diff {worst})'}")
+    print(f"   Cue v1 in all 14 languages x 4 views: {'same as eot-results/summary.json' if worst < 1e-9 else f'DIFFERENT (max diff {worst})'}")
 
     def ranked(metric, lang):
         vals = {k: v for k, v in got[metric][lang].items() if v is not None and k != "VAD baseline"}

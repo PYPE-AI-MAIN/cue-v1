@@ -1,6 +1,6 @@
 [
  {
-  "decision": "prompts/end_of_turn_phone.json",
+  "decision": "cue/prompts/end_of_turn_phone.json",
   "version": "bb30ae78",
   "inputs": {
    "agent_question": "What's the best number to reach you on?",
@@ -20,7 +20,7 @@
   ]
  },
  {
-  "decision": "prompts/end_of_turn_phone.json",
+  "decision": "cue/prompts/end_of_turn_phone.json",
   "version": "bb30ae78",
   "inputs": {
    "agent_question": "",
@@ -40,7 +40,7 @@
   ]
  },
  {
-  "decision": "prompts/end_of_turn_dialogue.json",
+  "decision": "cue/prompts/end_of_turn_dialogue.json",
   "version": "ac05ea9a",
   "inputs": {
    "Other person last said": "So how was the trip?",
@@ -59,7 +59,7 @@
   ]
  },
  {
-  "decision": "prompts/barge_in.json",
+  "decision": "cue/prompts/barge_in.json",
   "version": "2dc9013b",
   "inputs": {
    "agent_said": "Your appointment is on Tuesday at ten",
@@ -78,7 +78,7 @@
   ]
  },
  {
-  "decision": "prompts/barge_in.json",
+  "decision": "cue/prompts/barge_in.json",
   "version": "2dc9013b",
   "inputs": {
    "agent_said": "Your appointment is on Tuesday at ten",
@@ -93,25 +93,6 @@
    {
     "role": "user",
     "content": "Agent is saying: Your appointment is on Tuesday at ten\nAgent asked: (nothing)\nCaller said: hmm\nAnswer:"
-   }
-  ]
- },
- {
-  "decision": "training/prompts/end_of_turn_production.json",
-  "version": "d498d7e0",
-  "inputs": {
-   "agent_question": "And your date of birth?",
-   "caller_earlier": "",
-   "caller_text": "it's the twelfth of"
-  },
-  "messages": [
-   {
-    "role": "system",
-    "content": "The caller has paused on a phone call. Where are they in their turn?\n\nOptions:\nA: finished: an answer, a question, a complete statement. Reply now\nB: probably finished, but it trails off; a short grace is enough\nC: mid-sentence or mid-list: a trailing 'and', 'so', 'lekin', 'my number is', 'let me think', half a number. They will continue\nD: telling something long, a story or an explanation, or asked not to be interrupted: a pause is them thinking\n\nAnswer with exactly one letter."
-   },
-   {
-    "role": "user",
-    "content": "Agent asked: And your date of birth?\nCaller earlier: (nothing)\nCaller said: it's the twelfth of\nAnswer:"
    }
   ]
  }

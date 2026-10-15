@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from cue import UNPUNCTUATED, Cue, ending, last_question, load, p_end  # noqa: E402
+from cue import UNPUNCTUATED, Cue, ending, last_question, load, p_end, prompt  # noqa: E402
 
 
 def inputs_for(messages: list[dict]) -> dict[str, str] | None:
@@ -48,7 +48,7 @@ def punctuation_rate(turns: list[str]) -> float:
 class CueEndOfTurn:
     def __init__(self, base_url: str, model: str = "cue", decision: str | Path | None = None,
                  concurrency: int = 2, empty: float = 0.5) -> None:
-        self.decision = load(decision or Path(__file__).resolve().parents[2] / "prompts" / "end_of_turn_phone.json")
+        self.decision = load(decision or prompt("end_of_turn_phone"))
         self.cue = Cue(base_url, model)
         self.empty = empty                    # p(eot) before any word is visible: about as often an end as not
         self.punctuated = True                # False: the recogniser seldom punctuates this language

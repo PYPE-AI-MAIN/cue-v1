@@ -7,8 +7,8 @@ p_words is Cue v1's end-of-turn answer (DONE + LIKELY_DONE); p_voice is Smart Tu
 moments. The square root makes the voice count half as much as the words (log p = log p_words + 0.5 log p_voice);
 chosen once on 150 English development turns, then fixed for every turn and language.
 
-    python eval/eot_bench/leaderboard.py --harness ../eot-bench
-    # -> eval/eot_bench/out/leaderboard/<span set>/language_comparison/ (report.md, summary.json, heatmaps)
+    python eot-results/reproduce/leaderboard.py --harness eot-bench
+    # -> eot-results/reproduce/out/leaderboard/<span set>/language_comparison/ (report.md, summary.json, heatmaps)
 """
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ def main() -> None:
                  "transcript_lag": 0.5, "score_point": None}
         (m / "manifest.json").write_text(json.dumps({
             "harness_version": "0.1.0", "span_set_id": span_set.get("span_set_id"), "model_run_id": "cue_v1",
-            "adapter": "eval/eot_bench/leaderboard.py", **{k: model[k] for k in ("adapter_id", "display_name")},
+            "adapter": "eot-results/reproduce/leaderboard.py", **{k: model[k] for k in ("adapter_id", "display_name")},
             "inference_interval": 0.1, "transcript_lag": 0.5, "score_point": None, "language": lang,
             "n_rows": len(pred), "n_spans": int(pred.groupby(["id", "span_index"]).ngroups),
             "dataset": {"path": "livekit/eot-bench-data", "split": "validation", "min_silence_span": 0.1, "language": lang},

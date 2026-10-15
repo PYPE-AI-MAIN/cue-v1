@@ -2,7 +2,7 @@
 
 The system message is the decision itself: the instruction, the options as letters, any worked examples. The user
 message is this moment's inputs, in the same layout the examples use, ending where the model writes its letter.
-This is the exact rendering Shortwire uses on live calls, on eot-bench and in training (tests/ hold the proof).
+This is the exact rendering used on live calls, on eot-bench and in training (tests/ hold the proof).
 """
 from __future__ import annotations
 
@@ -80,9 +80,29 @@ def parse(d: dict) -> Decision:
                     version=version_of(d), context=tuple(d.get("context", ())))
 
 
-def load(path: str | Path) -> Decision:
-    """A decision from its JSON file, e.g. prompts/end_of_turn_phone.json."""
-    return parse(json.loads(Path(path).read_text()))
+# the three prompts Cue v1 was trained on, shipped inside the package
+PROMPTS = Path(__file__).resolve().parent / "prompts"
+
+
+def prompt(name: str) -> Path:
+    """The file of a prompt shipped with Cue v1: "end_of_turn_phone", "end_of_turn_dialogue" or "barge_in"."""
+    path = PROMPTS / f"{name}.json"
+    if not path.exists():
+        names = ", ".join(sorted(p.stem for p in PROMPTS.glob("*.json")))
+        raise FileNotFoundError(f"no prompt {name!r}: Cue v1 ships {names}")
+    return path
+
+
+def load(path_or_name: str | Path) -> Decision:
+    """A decision: a shipped prompt by name ("end_of_turn_phone") or a JSON file of your own (any path). The repo's
+    older layout, "prompts/end_of_turn_phone.json", still finds the shipped prompt when no such file exists."""
+    path = Path(path_or_name)
+    shipped = PROMPTS / f"{path.stem}.json"
+    if isinstance(path_or_name, str) and len(path.parts) == 1 and path.suffix == "" and shipped.exists():
+        path = shipped                                  # a bare name is always the shipped prompt
+    elif not path.exists() and path.parts == ("prompts", f"{path.stem}.json") and shipped.exists():
+        path = shipped
+    return parse(json.loads(path.read_text()))
 
 
 def inputs_block(decision: Decision, inputs: dict[str, object], *, example: bool = False) -> str:

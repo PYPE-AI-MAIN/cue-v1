@@ -1,7 +1,7 @@
 """The prompts are rendered byte for byte as on the benchmarks and in training, and answers are read correctly.
 
 tests/fixtures/rendered.json was written by Shortwire's own renderer; the version hashes are the ones in every
-benchmark run's name (bb30ae78 on eot-bench, ac05ea9a on the two-person benchmark, d498d7e0 in training).
+benchmark run's name (bb30ae78 on eot-bench, ac05ea9a on the two-person benchmark).
 """
 import json
 import math
@@ -29,7 +29,7 @@ def response(top: dict[str, float], content: str = "A") -> dict:
 
 
 def test_read_normalises_over_option_letters():
-    d = load(ROOT / "prompts" / "end_of_turn_phone.json")
+    d = load("end_of_turn_phone")
     probs = read(d, response({"C": 0.6, " D": 0.2, "A": 0.1, "Hello": 0.05}))
     assert probs["MID_THOUGHT"] == pytest.approx(0.6 / 0.9)
     assert probs["HOLDING"] == pytest.approx(0.2 / 0.9)
@@ -38,7 +38,7 @@ def test_read_normalises_over_option_letters():
 
 
 def test_read_falls_back_to_the_written_letter():
-    d = load(ROOT / "prompts" / "barge_in.json")
+    d = load("barge_in")
     r = {"choices": [{"message": {"content": "A"}, "logprobs": None}]}
     assert read(d, r) == {"STOP": 1.0, "CONTINUE": 0.0}
 
