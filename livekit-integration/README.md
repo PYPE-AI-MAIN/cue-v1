@@ -21,49 +21,46 @@ in the repo root. A complete agent with all three switches is in [`examples/live
 Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**. Below, "she" is the agent and "the caller" is the person on the
 line.
 
-## 0. Serve Cue and install
+## 0. Install and serve Cue
 
-Cue runs on a GPU behind any OpenAI-compatible server that returns `logprobs`. With llama.cpp:
-
-```bash
-huggingface-cli download Pype/cue-v1 cue-v1-q8_0.gguf --local-dir .
-llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
-```
-
-`-np` is how many questions llama.cpp answers at once. A call has at most two out at a time: an end-of-turn question
-and, with barge-in, a barge-in question. Each takes well under a second, so a few slots serve many calls. The repo's
-README estimates about 20 concurrent calls per T4 ([Speed and cost](../RESULTS.md#speed-and-cost)).
-
-Install two packages: the Cue client from the repo root (`cue-turn`), and this folder (`cue-livekit`). This folder's
-package brings `livekit-agents[silero]`, `numpy`, `onnxruntime` and `huggingface_hub`. Add the plugins your agent uses
-(the examples here use OpenAI's). From a clone:
+Install two packages: Cue itself (`cue-turn`, the repo root), and this folder (`cue-livekit`). This folder brings
+`livekit-agents[silero]` and what Smart Turn needs (`numpy`, `onnxruntime`). Add the LiveKit plugins your agent uses;
+the examples here use OpenAI's. From a clone:
 
 ```bash
 git clone https://github.com/PYPE-AI-MAIN/cue-v1 && cd cue-v1
-pip install -e . -e ./livekit "livekit-agents[openai]~=1.8"
+pip install -e . -e ./livekit-integration "livekit-agents[openai]~=1.8"
 ```
 
 Or without a clone:
 
 ```bash
 pip install "cue-turn @ git+https://github.com/PYPE-AI-MAIN/cue-v1" \
-            "cue-livekit @ git+https://github.com/PYPE-AI-MAIN/cue-v1#subdirectory=livekit" \
+            "cue-livekit @ git+https://github.com/PYPE-AI-MAIN/cue-v1#subdirectory=livekit-integration" \
             "livekit-agents[openai]~=1.8"
 ```
 
-Check the server answers. This should print a p(done) close to 1 for a full phone number:
+Then serve Cue v1. This downloads it from Hugging Face once (about 8 GB) and starts llama.cpp's `llama-server` at
+`http://localhost:8090/v1`:
 
 ```bash
-python -c "
-from cue import Cue, ending, load, p_end
-from cue_livekit import prompt
-said = 'It is nine eight four five six seven one two three four.'
-probs = Cue('http://localhost:8090/v1').ask(load(prompt('end_of_turn_phone')), {'agent_question': 'What is your number?',
-    'caller_earlier': '', 'caller_text': said, 'transcript_end': ending(said)})
-print(p_end(probs))"
+cue serve
 ```
 
-From a clone, `python examples/quickstart.py` (in the repo root) runs a few more.
+`llama-server` itself comes from llama.cpp (`brew install llama.cpp` on a Mac; prebuilt releases and Docker images
+for Linux and NVIDIA GPUs at [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp)). Cue runs best on a GPU;
+a T4 is enough. See the [main README](../README.md#serve-it-yourself) to run the server another way.
+
+Check that it answers. A full phone number should come back DONE, with p(done) close to 1:
+
+```bash
+cue ask "It is nine eight four five six seven one two three four." --agent-said "What is your number?"
+```
+
+Serving capacity: llama-server answers `-np` questions at once (4 by default). A call has at most two out at a time:
+an end-of-turn question and, with barge-in, a barge-in question. Each takes well under a second, so a few slots serve
+many calls. The results estimate about 20 concurrent calls per T4
+([Speed and cost](../eot-results/README.md#speed-and-cost)).
 
 ## 1. Words only: a drop-in turn detector
 
@@ -176,7 +173,7 @@ CueTurnDetector(
 - **The dialogue prompt** reads her last message and the caller's words, as it was trained. For two people talking,
   use it with `graded_waits=True` and without Smart Turn: in our two-person tests, adding Smart Turn made it slightly
   worse.
-- **Your own prompt JSON** (in the format of `prompts/`) must read one of the two shipped input sets. These are the
+- **Your own prompt JSON** (in the format of `cue/prompts/`) must read one of the two shipped input sets. These are the
   phone prompt's `agent_question`, `caller_earlier`, `caller_text` and `transcript_end`, or the dialogue prompt's three.
   The detector raises `ValueError` for anything else.
 - **Languages.** Cue v1 ran 14 languages on its English prompt on eot-bench. For a language outside `languages`, the
@@ -421,7 +418,7 @@ For Cue's own graded waits, pass `graded_waits=True` and call `detector.attach(s
   - keeping and opening the connection to the Cue server;
   - resampling 48 kHz stereo audio for Smart Turn.
 
-  Run them from the repo root with `pip install -e . -e "./livekit[test]" && pytest livekit/tests`.
+  Run them from the repo root with `pip install -e . -e "./livekit-integration[test]" && pytest livekit-integration/tests`.
 - **Real LiveKit sessions** on 1.7.1, 1.8.1 and 1.8.7, with a scripted LLM and a real-time audio output, one per
   tricky situation. Each gives the same outcome on all three versions:
   - a tool running after she has spoken;

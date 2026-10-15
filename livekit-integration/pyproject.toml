@@ -5,14 +5,15 @@ description = "Cue v1 as a LiveKit Agents turn detector, with Smart Turn v3.2 an
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
-# cue-turn is the client in this repo's root (not on PyPI): install it from the clone or the git URL (README.md)
-dependencies = ["cue-turn", "livekit-agents[silero]>=1.7.1,<1.9", "numpy", "onnxruntime", "huggingface_hub"]
+# cue-turn is the Cue package in this repo's root (not on PyPI): install it from the clone or the git URL (README.md)
+dependencies = ["cue-turn[voice]", "livekit-agents[silero]>=1.7.1,<1.9"]
 
 [project.optional-dependencies]
 test = ["pytest"]
 
 [project.urls]
 Model = "https://huggingface.co/Pype/cue-v1"
+Source = "https://github.com/PYPE-AI-MAIN/cue-v1"
 
 [build-system]
 requires = ["hatchling"]
@@ -20,7 +21,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cue_livekit"]
-
-# the repo's prompts ship inside this package's wheel, so prompt() finds them without a clone
-[tool.hatch.build.targets.wheel.force-include]
-"../prompts" = "cue_livekit/prompts"

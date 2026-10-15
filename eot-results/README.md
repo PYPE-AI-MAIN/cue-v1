@@ -1,15 +1,79 @@
 # Cue v1: results and analysis
 
 What we measured, how, what helped, what didn't, and where Cue v1 still loses. Every eot-bench number here can be
-checked from the saved predictions in `results/eot_bench/runs/` with LiveKit's own harness:
+checked from the saved predictions in [`runs/`](runs/) with LiveKit's own harness. See
+[Check our numbers](#check-our-numbers).
 
-```bash
-git clone https://github.com/livekit/eot-bench && pip install -e eot-bench
-python results/eot_bench/verify.py --harness eot-bench        # ALL CHECKS PASS
-```
+| In this folder | What it is |
+|---|---|
+| `runs/<language>/` | Every run behind the numbers, in the harness's own format: predictions, manifest, metrics |
+| `summary.json`, `report.md` | Cue v1 ranked against every published model, all 14 languages and four views |
+| `verify.py` | Recomputes all of it with LiveKit's harness. No GPU or model needed |
+| `reproduce/` | Runs the benchmark from scratch against a served Cue v1 |
+| `charts/` | The charts below |
 
 **Cue v1 = the fine-tuned Gemma 4 E4B's logits (the words and context) × √Smart Turn v3.2 (the voice).** "Gemma part
 only" below is the fine-tune on its own; "Smart Turn" is Smart Turn v3.2 on its own.
+
+## Charts
+
+![Cue v1 on eot-bench, English](charts/cue-v1-english.png)
+
+![Latency at a 5% false cut-off rate, 14 languages](charts/cue-v1-languages-latency.png)
+
+<details>
+<summary>The other views: cut-offs at 300 ms and 600 ms, latency at 10%</summary>
+
+![False cut-offs at a 300 ms latency budget](charts/cue-v1-languages-cutoffs.png)
+
+![False cut-offs at a 600 ms latency budget](charts/cue-v1-languages-cutoffs-600ms.png)
+
+![Latency at a 10% false cut-off rate](charts/cue-v1-languages-latency-10pct.png)
+
+</details>
+
+## Check our numbers
+
+`runs/<language>/` holds every run behind the numbers, in the harness's own format (predictions, manifest, metrics):
+
+| Folder | What it is |
+|---|---|
+| `cue_v1/` | Cue v1: the published predictions |
+| `cue_v1_gemma_part/` | The fine-tune's words-only scores, before the voice is added |
+| `smart_turn_v3.2/` | Smart Turn v3.2 run by us on the same moments: the voice half |
+| `cue_v1_on_base_gemma/` | The same recipe on the base Gemma, for the fine-tune comparison |
+
+No GPU or model needed. From the repo root, one script does three things with LiveKit's harness:
+
+- recomputes every run's metrics;
+- rebuilds Cue v1 from its two halves;
+- ranks it against the published models.
+
+```bash
+git clone https://github.com/livekit/eot-bench && pip install -e eot-bench
+python eot-results/verify.py --harness eot-bench
+# ... Cue v1: 4 of 13 in English; 1 of 11 in Portuguese
+# ALL CHECKS PASS
+```
+
+## Reproduce from scratch
+
+Serve Cue v1 first (`cue serve`, see the [main README](../README.md)), then, from the repo root:
+
+```bash
+git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e . pandas pyarrow
+# the Gemma part, every turn of every language
+python eot-results/reproduce/run.py --harness eot-bench --rows 0 --lang en ar de es fr hi id it ja ko nl pt tr zh
+# Smart Turn v3.2 on the same moments
+python eot-results/reproduce/run.py --harness eot-bench --rows 0 --lang en ar de es fr hi id it ja ko nl pt tr zh \
+    --reference eot_harness.smart_turn_adapter:SmartTurnAudioAdapter
+# combine (Gemma part x sqrt Smart Turn), rank against every published model, draw the heatmaps
+python eot-results/reproduce/leaderboard.py --harness eot-bench
+```
+
+Each run prints its model calls and how many failed. A failed call scores 0, so check that it says `(0 failed)`.
+llama.cpp is not bit-exact when it serves several requests at once: a rerun matches the published scores to within
+about 0.003 on average, which does not move the ranks.
 
 ## The benchmark
 
@@ -107,7 +171,7 @@ examples. English, Gemma words only:
 | v5 without its examples | | 910 / 662 ms |
 | **v5 with its 11 examples** | 757 / 576 ms | **750 / 552 ms** |
 
-The examples alone are worth about 160 ms. Cue v1 uses the v5 prompt (`prompts/end_of_turn_phone.json`).
+The examples alone are worth about 160 ms. Cue v1 uses the v5 prompt (`cue/prompts/end_of_turn_phone.json`).
 
 **2. Adding the voice, with the square root.** The words decide most; the voice breaks ties. On the 150 development
 turns we compared ways to combine the words' p(done) with Smart Turn's score: the product, the mean, the minimum,
@@ -128,7 +192,7 @@ The base model almost never answers HOLDING; the fine-tune learned it. On eot-be
 both ways, the fine-tune is faster than the base Gemma in 11 of 14 languages at both budgets: Portuguese from 4th to
 1st, Hindi from 7th to 4th, French 698 → 647 ms. It is slower in Dutch (688 → 770 ms at 5%), and at 10% in English
 (502 → 532 ms) and Chinese (606 → 637 ms). In English alone, the fine-tune and a well-prompted base Gemma tie
-(719 / 532 against 723 / 502 ms). The base-Gemma runs are in `results/eot_bench/runs/*/cue_v1_on_base_gemma/`.
+(719 / 532 against 723 / 502 ms). The base-Gemma runs are in `runs/*/cue_v1_on_base_gemma/`.
 
 ## What didn't help
 
@@ -169,9 +233,9 @@ words arrive.
 
 ## Training
 
-- **310 conversations written by an LLM** to `training/SPEC.md`: 150 phone calls between a caller and an agent and 160
-  two-person conversations, each on a different topic; about 10,600 labelled pauses and about 1,000 listener sounds.
-  The conversations themselves are not published.
+- **310 conversations written by an LLM** to a written specification: 150 phone calls between a caller and an agent
+  and 160 two-person conversations, each on a different topic, with about 10,600 labelled pauses and about 1,000
+  listener sounds. The conversations, the specification and the training scripts are not published.
 - The mix was shaped by a few aggregate statistics of TurnBench's public dev split (how often a pause is a hold, how
   often a hold follows a complete sentence, how often a turn ends without punctuation). No benchmark audio, transcript
   or label was used as an example.

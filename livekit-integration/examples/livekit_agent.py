@@ -2,10 +2,9 @@
 
 From the repo root:
 
-    pip install -e . -e ./livekit "livekit-agents[openai]~=1.8"
-    huggingface-cli download Pype/cue-v1 cue-v1-q8_0.gguf --local-dir .
-    llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090
-    OPENAI_API_KEY=... python livekit/examples/livekit_agent.py console
+    pip install -e . -e ./livekit-integration "livekit-agents[openai]~=1.8"
+    cue serve                                   # in another terminal: downloads and serves Cue v1
+    OPENAI_API_KEY=... python livekit-integration/examples/livekit_agent.py console
 
 Settings (environment):
     CUE_URL          the Cue server (default http://localhost:8090/v1)

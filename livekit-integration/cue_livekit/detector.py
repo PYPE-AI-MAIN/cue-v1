@@ -33,28 +33,17 @@ from typing import Any, AsyncIterable, AsyncIterator
 import httpx
 
 from cue.client import WAITS, Cue, p_end, wait, with_voice
-from cue.decision import UNPUNCTUATED, Decision, ending, last_question, load
+from cue.decision import UNPUNCTUATED, Decision, ending, last_question, load, prompt
 
 log = logging.getLogger("cue.livekit")
 
 # the prompts: shipped in this package's wheel, or the repo's prompts/ folder when run from a clone
-_PROMPT_DIRS = (Path(__file__).resolve().parent / "prompts", Path(__file__).resolve().parents[2] / "prompts")
-
-# the end-of-turn inputs this adapter fills: the phone prompt's four and the dialogue prompt's three
 # graded waits when Cue's words say the caller is not done: blended over the not-done answers only (1.75 to 2.25 s)
 NOT_DONE_WAITS = {o: WAITS[o] for o in ("MID_THOUGHT", "HOLDING")}
 
+# the end-of-turn inputs this adapter fills: the phone prompt's four and the dialogue prompt's three
 PHONE_INPUTS = ("agent_question", "caller_earlier", "caller_text", "transcript_end")
 DIALOGUE_INPUTS = ("Other person last said", "Speaker said", "Speaker's words end with")
-
-
-def prompt(name: str) -> Path:
-    """A prompt shipped with Cue v1 (``end_of_turn_phone``, ``end_of_turn_dialogue``, ``barge_in``)."""
-    for d in _PROMPT_DIRS:
-        p = d / f"{name}.json"
-        if p.exists():
-            return p
-    raise FileNotFoundError(f"{name}.json: pass its path (the prompts are in the repo and on the Hugging Face page)")
 
 
 def _messages(chat_ctx: Any) -> list[dict[str, str]]:

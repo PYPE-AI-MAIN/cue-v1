@@ -1,15 +1,15 @@
 """Score Cue v1 on eot-bench, beside every reference model on the same turns, with the harness's own metrics.
 
-    git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e ".[eval]"
+    git clone https://github.com/livekit/eot-bench && pip install -e eot-bench -e . pandas pyarrow
     llama-server -m cue-v1-q8_0.gguf -c 8192 -np 4 -ngl 999 --jinja --port 8090      # the model, from Hugging Face
 
     # Cue v1's words, all turns, every language (the published runs)
-    python eval/eot_bench/run.py --harness ../eot-bench --base-url http://localhost:8090/v1 --rows 0 \
+    python eot-results/reproduce/run.py --harness ../eot-bench --base-url http://localhost:8090/v1 --rows 0 \
         --lang en ar de es fr hi id it ja ko nl pt tr zh
     # Smart Turn v3.2 on the same moments, run by us (the voice half of Cue v1 x sqrt(Smart Turn))
-    python eval/eot_bench/run.py --harness ../eot-bench --rows 0 --lang en ... \
+    python eot-results/reproduce/run.py --harness ../eot-bench --rows 0 --lang en ... \
         --reference eot_harness.smart_turn_adapter:SmartTurnAudioAdapter
-    # then combine and rank: eval/eot_bench/leaderboard.py
+    # then combine and rank: eot-results/reproduce/leaderboard.py
 
 The sample is a seeded random draw of whole caller turns (--rows 0: all of them), so every model is scored on
 exactly the same pauses; the references' predictions come from the harness's committed output/.
@@ -119,7 +119,7 @@ def main() -> None:
     ap.add_argument("--offset", type=int, default=0)
     ap.add_argument("--base-url", default="http://localhost:8090/v1", help="an OpenAI-compatible server with logprobs")
     ap.add_argument("--model", default="cue")
-    ap.add_argument("--decision", default=None, help="a decision JSON (default: prompts/end_of_turn_phone.json)")
+    ap.add_argument("--decision", default=None, help="a decision JSON (default: the shipped end_of_turn_phone prompt)")
     ap.add_argument("--empty", type=float, default=0.5, help="p(eot) before any word is visible")
     ap.add_argument("--reference", default=None,
                     help="run a harness adapter instead (module:Class, e.g. eot_harness.smart_turn_adapter:SmartTurnAudioAdapter)")

@@ -1,12 +1,14 @@
 """Smart Turn v3.2 (pipecat-ai/smart-turn-v3) on the caller's audio: p(the turn is complete), from how it sounds.
 
 Cue v1 reads words, not prosody. On LiveKit's eot-bench it ranks where it does combined with an audio turn model:
-p(done) x sqrt(Smart Turn's score) (``cue.with_voice``). This runs Smart Turn locally with onnxruntime and numpy.
+p(done) x sqrt(Smart Turn's score) (``cue.with_voice``). This runs Smart Turn locally on the CPU with onnxruntime and
+numpy: pip install "cue-turn[voice]". The model (BSD-2, by Pipecat) is downloaded from Hugging Face, not shipped here.
 
-    model = SmartTurn()                   # downloads smart-turn-v3.2-cpu.onnx from the Hub, or SmartTurn("model.onnx")
+    from cue.smart_turn import SmartTurn
+    model = SmartTurn()                   # downloads smart-turn-v3.2-cpu.onnx once, or SmartTurn("model.onnx")
     st = model.fresh()                    # one per call: the model is shared, the audio buffer is not
     st.push(pcm16k)                       # the caller's audio, as it arrives (16 kHz mono float or int16)
-    p = st.predict()                      # the last 8 s of the turn so far
+    p_done = with_voice(cue.end_of_turn(words, agent_said=question), st.predict())    # at each pause
 
 Preprocessing follows the model's reference inference: the last 8 s of the turn, zeros in front when shorter,
 the waveform normalised to zero mean and unit variance, then Whisper's 80-bin log-mel spectrogram (n_fft 400,
