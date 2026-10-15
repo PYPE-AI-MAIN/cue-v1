@@ -195,14 +195,30 @@ class FakeSpeech:
         return None
 
 
-class FakeSession:
-    """What the detector needs of an AgentSession 1.8.1: on(), agent_state, user_state, current_speech, the
-    activity's speech queue and background (tool) speeches, update_options()."""
+class BaseEndpointing:
+    """LiveKit's fixed-mode endpointing, as the detector uses it (same name, max_delay, update_options)."""
 
-    def __init__(self):
+    def __init__(self, min_delay=0.3, max_delay=2.0):
+        self.min_delay, self.max_delay, self.updates = min_delay, max_delay, []
+
+    def update_options(self, *, min_delay=None, max_delay=None):
+        self.updates.append(max_delay)
+        self.max_delay = max_delay if max_delay is not None else self.max_delay
+
+
+class FakeSession:
+    """What the detector needs of an AgentSession: on(), agent_state, user_state, current_speech, and the activity's
+    speech queue, background (tool) speeches and live endpointing."""
+
+    def __init__(self, endpointing=None):
         self.handlers, self.agent_state, self.user_state = {}, "listening", "listening"
-        self.current_speech, self.endpointing = None, []
-        self._activity = SimpleNamespace(_speech_q=[], _background_speeches=set())
+        self.current_speech = None
+        self._activity = SimpleNamespace(_speech_q=[], _background_speeches=set(),
+                                         _audio_recognition=SimpleNamespace(_endpointing=endpointing or BaseEndpointing()))
+
+    @property
+    def endpointing(self):
+        return self._activity._audio_recognition._endpointing
 
     def on(self, name):
         def add(fn):
@@ -222,8 +238,6 @@ class FakeSession:
     def queue(self, speech):
         self._activity._speech_q.append((0, float(len(self._activity._speech_q)), speech))
 
-    def update_options(self, *, endpointing_opts):
-        self.endpointing.append(endpointing_opts)
 
 
 async def tts(det, speech, text):
@@ -533,8 +547,202 @@ def test_graded_waits_set_livekits_max_delay_from_cues_answer():
         await det.predict_end_of_turn(chat(("user", "I stay in Pune but")))
         await det.predict_end_of_turn(chat(("user", "that's all, I'm done.")))
     run(main())
-    assert len(session.endpointing) == 1, "only when Cue says the caller is not done"
-    assert session.endpointing[0]["max_delay"] == pytest.approx(0.97 * 2.25 + 0.01 * (0.5 + 1.0 + 1.75), abs=1e-6)
+    holding = (0.97 * 2.25 + 0.01 * 1.75) / 0.98      # blended over the not-done answers only
+    assert session.endpointing.updates == [pytest.approx(holding), 2.0], "then a finished turn: its own max_delay back"
+
+
+class Fallback:
+    """A LiveKit turn detector standing in for MultilingualModel: its own p and its own threshold."""
+
+    def __init__(self, p=0.2, threshold=0.6, languages=("en", "ta")):
+        self.p, self.threshold, self.languages, self.asked = p, threshold, languages, 0
+
+    async def supports_language(self, language):
+        return language is None or str(language).split("-")[0] in self.languages
+
+    async def unlikely_threshold(self, language):
+        return self.threshold
+
+    async def predict_end_of_turn(self, chat_ctx, *, timeout=3):
+        self.asked += 1
+        self.timeouts = getattr(self, "timeouts", []) + [timeout]
+        return self.p
+
+
+def test_with_no_answer_the_fallback_decides_on_its_own_scale_and_cue_takes_over_again():
+    fb = Fallback(p=0.2, threshold=0.6)
+    det, _ = detector({}, fail=True, fallback=fb)
+
+    async def main():
+        assert await det.supports_language("en")
+        p = await det.predict_end_of_turn(chat(("user", "my number is nine eight")))
+        assert p == 0.2 and await det.unlikely_threshold("en") == 0.6, "the fallback's own threshold, for its p"
+        assert fb.timeouts == [1.0], "LiveKit passes no timeout: the fallback gets ours, not its own 3 s"
+        s = det.last_end_of_turn
+        assert s["status"] == "fallback" and s["reason"] == "no_answer" and s["error"] and s["language"] == "en"
+        good, _ = detector({"end_of_turn_phone": [("done", "DONE")]}, fallback=fb)
+        await good.supports_language("en")
+        assert await good.predict_end_of_turn(chat(("user", "that's all, I'm done."))) == pytest.approx(0.98)
+        assert await good.unlikely_threshold("en") == 0.5 and good.last_end_of_turn["status"] == "cue"
+    run(main())
+
+
+def test_the_fallback_decides_languages_cue_does_not_and_livekit_is_told_so():
+    fb = Fallback(p=0.3, languages=("ta",))
+    det, asked = detector({}, languages=["en", "hi"], fallback=fb)
+    plain, _ = detector({}, languages=["en", "hi"])
+
+    async def main():
+        assert await det.supports_language("ta-IN"), "LiveKit must call predict_end_of_turn for the fallback to decide"
+        assert not await plain.supports_language("ta-IN") and not await det.supports_language("kn-IN")
+        await det.supports_language("ta-IN")
+        p = await det.predict_end_of_turn(chat(("user", "naan chennai la irukken")))
+        assert p == 0.3 and asked == [] and det.last_end_of_turn["status"] == "fallback"
+        assert det.last_end_of_turn["reason"] == "language"
+    run(main())
+
+
+def test_every_turn_leaves_a_status():
+    det, _ = detector({"barge_in": [("hmm", "CONTINUE")], "end_of_turn_phone": [("done", "DONE")]}, barge_in=True)
+    session = FakeSession()
+    det.attach(session)
+
+    async def main():
+        await det.predict_end_of_turn(chat(("assistant", "Hello")))
+        assert det.last_end_of_turn["status"] == "skipped" and det.last_end_of_turn["reason"] == "no_words"
+        await det.predict_end_of_turn(chat(("user", "that's all, I'm done.")))
+        assert det.last_end_of_turn["status"] == "cue" and det.last_end_of_turn["option"] == "DONE"
+        await speak(det, session, "The plan covers", 0.01)
+        await det.predict_end_of_turn(chat(("user", "hmm")))
+        assert det.last_end_of_turn["status"] == "skipped" and det.last_end_of_turn["reason"] == "backchannel"
+        down, _ = detector({}, fail=True)
+        await down.predict_end_of_turn(chat(("user", "hello")))
+        assert down.last_end_of_turn["status"] == "no_answer" and down.last_end_of_turn["p"] == 1.0
+        assert down.last_end_of_turn["error"], "why there was no answer"
+    run(main())
+
+
+def test_graded_waits_put_the_sessions_own_max_delay_back_when_cue_does_not_decide():
+    det, _ = detector({"end_of_turn_phone": [("pune but", "HOLDING")]}, graded_waits=True)
+    session = FakeSession()
+    det.attach(session)
+
+    async def main():
+        await det.predict_end_of_turn(chat(("user", "I stay in Pune but")))
+        assert session.endpointing.max_delay == pytest.approx(2.24, abs=0.01)
+        det.cue._async = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+        await det.predict_end_of_turn(chat(("user", "I stay in Pune but")))
+        assert session.endpointing.max_delay == 2.0, "Cue did not decide: the session's own wait"
+        n = len(session.endpointing.updates)
+        await det.predict_end_of_turn(chat(("user", "still nothing")))
+        assert len(session.endpointing.updates) == n, "nothing to put back twice"
+    run(main())
+
+
+def test_graded_waits_change_only_max_delay_and_keep_an_agents_own_endpointing():
+    ep_mod = pytest.importorskip("livekit.agents.voice.endpointing")
+    agent_ep = ep_mod.BaseEndpointing(min_delay=1.2, max_delay=3.0)      # set on the Agent, merged by LiveKit
+    det, _ = detector({"end_of_turn_phone": [("pune but", "HOLDING")]}, graded_waits=True)
+    session = FakeSession(endpointing=agent_ep)
+    det.attach(session)
+
+    async def main():
+        await det.predict_end_of_turn(chat(("user", "I stay in Pune but")))
+        assert agent_ep.min_delay == 1.2 and agent_ep.max_delay == pytest.approx(2.24, abs=0.01)
+        await det.predict_end_of_turn(chat(("user", "that's all.")))         # DONE (the server's default answer)
+        assert (agent_ep.min_delay, agent_ep.max_delay) == (1.2, 3.0), "the Agent's own, not the session's"
+        handoff = ep_mod.BaseEndpointing(min_delay=0.5, max_delay=1.5)      # a new agent: a new endpointing
+        session._activity._audio_recognition._endpointing = handoff
+        await det.predict_end_of_turn(chat(("user", "I stay in Pune but")))
+        await det.predict_end_of_turn(chat(("user", "that's all.")))
+        assert handoff.max_delay == 1.5, "its own max_delay back, not the previous agent's"
+    run(main())
+
+
+def test_graded_waits_leave_a_smart_turn_veto_and_dynamic_endpointing_alone():
+    st = SimpleNamespace(predict=lambda: 0.05, reset=lambda: None)
+    det, _ = detector({"end_of_turn_phone": [("98450", "DONE")]}, graded_waits=True, smart_turn=st, threshold=0.3)
+    session = FakeSession()
+    det.attach(session)
+    p = run(det.predict_end_of_turn(chat(("user", "My number is 98450."))))
+    assert p < 0.3 and session.endpointing.updates == [], "Cue's words say done: the session's own max_delay"
+
+    class DynamicEndpointing(BaseEndpointing):
+        pass
+    det2, _ = detector({"end_of_turn_phone": [("pune but", "HOLDING")]}, graded_waits=True)
+    dynamic = FakeSession(endpointing=DynamicEndpointing())
+    det2.attach(dynamic)
+    run(det2.predict_end_of_turn(chat(("user", "I stay in Pune but"))))
+    assert dynamic.endpointing.updates == [], "dynamic mode learns its own delays"
+
+
+def test_a_streaming_turn_detector_is_refused_as_fallback_and_the_status_says_what_the_fallback_did():
+    with pytest.raises(TypeError, match="predict_end_of_turn"):
+        CueTurnDetector(fallback=SimpleNamespace(supports_language=None, unlikely_threshold=None))
+
+    class Picky(Fallback):
+        async def supports_language(self, language):
+            return language is not None                          # MultilingualModel: no language, no decision
+
+    class Broken(Fallback):
+        async def predict_end_of_turn(self, chat_ctx, *, timeout=3):
+            raise RuntimeError("model not loaded")
+
+    async def main():
+        det, _ = detector({}, fail=True, fallback=Picky())
+        await det.supports_language(None)
+        assert await det.predict_end_of_turn(chat(("user", "hello"))) == 1.0
+        s = det.last_end_of_turn
+        assert s["status"] == "no_answer" and s["fallback"] == "declined" and s["error"]
+        det, _ = detector({}, fail=True, fallback=Broken())
+        await det.supports_language("en")
+        assert await det.predict_end_of_turn(chat(("user", "hello"))) == 1.0
+        s = det.last_end_of_turn
+        assert s["fallback"] == "failed" and s["fallback_error"] == "RuntimeError" and s["error"] != "RuntimeError"
+    run(main())
+
+
+def test_a_second_cue_server_can_be_the_fallback():
+    backup, asked_backup = detector({"end_of_turn_phone": [("98450", "MID_THOUGHT")]})
+    det, _ = detector({}, fail=True, fallback=backup)
+
+    async def main():
+        await det.supports_language("en")
+        p = await det.predict_end_of_turn(chat(("assistant", "Your number?"), ("user", "My number is 98450")))
+        assert p < 0.5 and det.last_end_of_turn["status"] == "fallback" and len(asked_backup) == 1
+        assert await det.unlikely_threshold("en") == 0.5
+    run(main())
+
+
+def test_a_language_livekit_will_not_ask_about_still_leaves_a_status():
+    det, _ = detector({"end_of_turn_phone": [("done", "DONE")]}, languages=["en"])
+
+    async def main():
+        await det.supports_language("en")
+        await det.predict_end_of_turn(chat(("user", "that's all, I'm done.")))
+        assert det.last_end_of_turn["status"] == "cue"
+        assert not await det.supports_language("ta-IN")
+        s = det.last_end_of_turn
+        assert s["status"] == "skipped" and s["reason"] == "language" and s["language"] == "ta-IN"
+    run(main())
+
+
+def test_the_connection_is_kept_between_decisions_and_opened_on_attach():
+    det = CueTurnDetector("http://cue.test/v1", api_key="k")
+    assert det.cue._async._transport._pool._keepalive_expiry == 60.0, "httpx's default 5 s is shorter than a turn"
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, str(request.url), request.headers.get("authorization")))
+        return httpx.Response(200, json={"data": []})
+    det.cue._async = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    async def main():
+        det.attach(FakeSession())
+        await asyncio.sleep(0.05)
+        await det.aclose()
+    run(main())
+    assert seen == [("GET", "http://cue.test/v1/models", "Bearer k")]
 
 
 # -- Smart Turn ------------------------------------------------------------------------------------------------

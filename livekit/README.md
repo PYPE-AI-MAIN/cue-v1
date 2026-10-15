@@ -18,7 +18,8 @@ There are two optional additions:
 Everything is in this folder, a separate package (`cue-livekit`, imported as `cue_livekit`) on top of the Cue client
 in the repo root. A complete agent with all three switches is in [`examples/livekit_agent.py`](examples/livekit_agent.py).
 
-Built and tested on **livekit-agents 1.8.1**. Below, "she" is the agent and "the caller" is the person on the line.
+Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**. Below, "she" is the agent and "the caller" is the person on the
+line.
 
 ## 0. Serve Cue and install
 
@@ -120,9 +121,18 @@ Cue answers DONE, LIKELY_DONE, MID_THOUGHT or HOLDING, read as probabilities fro
 **Where the time goes.** LiveKit counts both delays from the end of the caller's speech, but it only asks the detector
 after Silero's end of speech (`min_silence_duration`, 0.55 s by default). A `min_delay` of 0.3 s has passed by then,
 so on the "likely done" path Cue's decision time adds to the reply: 79 ms one at a time on a T4, under 200 ms two at
-once, plus the network. On the "not done" path it
-comes out of `max_delay`. If Cue has not answered within `timeout` (default 1 s), the turn is treated as done, and
-that turn's reply comes up to `timeout` later than without a detector.
+once, plus the network. On the "not done" path it comes out of `max_delay`.
+
+The client keeps its connection to the Cue server open between decisions (`keepalive_s`, default 60 s), and
+`attach(session)` opens it when the call starts. A caller's turns are usually more than 5 s apart, and a new
+connection per decision costs time: through Caddy over TLS to our box, a decision on a new connection took a median
+of 141 ms, and on a kept one 67 ms. The server end has to keep the connection too. llama-server closes idle
+connections after 5 s (its HTTP library's default), so put a reverse proxy with a longer idle timeout in front of it
+(Caddy's default, or nginx with `keepalive_timeout 75s`) to get the saving.
+
+If Cue has not answered within `timeout` (default 1 s), the [fallback detector](#when-cue-cannot-answer-a-fallback)
+decides, with the same `timeout` for itself; without one, the turn is treated as done. So that turn's reply comes up
+to `timeout` later, or up to twice `timeout` with a fallback.
 
 **Logs.** Every decision is logged on the `cue.livekit` logger at INFO level:
 
@@ -131,8 +141,18 @@ cue: end_of_turn MID_THOUGHT p(done)=0.02 -> wait (158 ms) 'My number is 98450.'
 cue: end_of_turn DONE p(done)=0.98 -> reply (154 ms) 'My number is 98450. 1 2 3 4 5.'
 ```
 
-The last answered decision is kept in `detector.last_end_of_turn` (the option, the four probabilities, Smart Turn's
-score, p and the time). The last barge-in decision is in `detector.last_barge_in`.
+`detector.last_end_of_turn` describes the latest turn, whatever happened in it, so per-turn logs are never stale:
+
+| `status` | Meaning | Also holds |
+|---|---|---|
+| `cue` | Cue answered | `option`, the four `probs`, `smart_turn`, `p`, `ms` |
+| `fallback` | The fallback detector decided | `reason` (`no_answer` or `language`), `p`, `ms`; `error` (Cue's) when the reason is `no_answer` |
+| `no_answer` | Cue did not answer and no fallback decided: treated as done | `error` (Cue's); with a fallback, `fallback` (`declined` or `failed`) and `fallback_error` |
+| `skipped` | Cue was not asked: `reason` is `no_words`, `backchannel` (words over her that barge-in let pass) or `language` | with a fallback that declined or failed, the same `fallback` keys |
+
+Every entry also has `language`, `caller_text` and `p`: what LiveKit got. `p` is `None` for a turn LiveKit did not ask
+about at all, which is a language outside `languages` with no barge-in and no fallback. The last barge-in decision is
+in `detector.last_barge_in`.
 
 ### Options
 
@@ -144,10 +164,12 @@ CueTurnDetector(
     model="cue", api_key="x",            # whatever your server expects
     end_of_turn=prompt("end_of_turn_dialogue"),  # two people talking; default end_of_turn_phone (caller and agent)
     threshold=0.5,                       # below it LiveKit waits max_delay
-    timeout=1.0,                         # seconds; no answer in time = done
+    timeout=1.0,                         # seconds; no answer in time = the fallback decides, or done
+    fallback=None,                       # another LiveKit turn detector, for no answer and other languages (below)
     punctuated=True,                     # False: your STT seldom punctuates the caller's language
     languages=["en", "hi"],              # only these, in any form ("hi-IN", "english"); default all
     graded_waits=False,                  # True: Cue's own waits when the caller is not done (see below)
+    keepalive_s=60.0,                    # how long the connection to the Cue server is kept between decisions
 )
 ```
 
@@ -158,7 +180,32 @@ CueTurnDetector(
   phone prompt's `agent_question`, `caller_earlier`, `caller_text` and `transcript_end`, or the dialogue prompt's three.
   The detector raises `ValueError` for anything else.
 - **Languages.** Cue v1 ran 14 languages on its English prompt on eot-bench. For a language outside `languages`, the
-  turn is treated as done (`min_delay`). With barge-in on, barge-in still runs for those languages.
+  fallback detector decides if it supports the language; otherwise the turn is treated as done (`min_delay`). With
+  barge-in on, barge-in still runs for those languages.
+
+### When Cue cannot answer: a fallback
+
+Cue runs on a server, so it can be slow or down. By default, a turn without an answer is treated as done, so an
+outage makes her reply at `min_delay` and cut callers off. Give the detector a `fallback` to decide those turns
+instead. It must be a text turn detector, one with `predict_end_of_turn`:
+
+```python
+from livekit.plugins.turn_detector.multilingual import MultilingualModel   # pip install livekit-plugins-turn-detector
+
+detector = CueTurnDetector("http://localhost:8090/v1", languages=["en", "hi"], fallback=MultilingualModel())
+# or a second Cue server: fallback=CueTurnDetector("http://cue-backup:8090/v1")
+```
+
+The fallback decides when Cue has not answered within `timeout`, and for languages outside `languages`. Its answer
+is judged against its own threshold, not Cue's.
+
+- **`MultilingualModel`** (or `EnglishModel`) needs its model files downloaded once (`python agent.py
+  download-files`), as in any LiveKit agent that uses it. It decides only when the STT reports a specific language.
+  With `multi`, `auto` or none, it declines and the turn is treated as done.
+- **LiveKit marks that plugin as deprecated** in 1.7 and 1.8 (it logs a warning) in favour of
+  `livekit.agents.inference.TurnDetector`. It still works below 1.9.
+- **`inference.TurnDetector` cannot be a fallback.** It is a streaming detector that listens to the audio and has no
+  `predict_end_of_turn`. The detector refuses it with a `TypeError` rather than fail on every turn.
 
 ## 2. Add Smart Turn v3.2 (the benchmarked recipe)
 
@@ -237,7 +284,7 @@ arithmetic, not how well Cue v1 does.
 
 ## 3. Let Cue decide barge-in
 
-What LiveKit 1.8.1 does on its own when the caller speaks over her:
+What LiveKit (1.7 and 1.8) does on its own when the caller speaks over her:
 
 - **Self-hosted:** it stops her after 0.5 s of the caller's speech, so a "hmm" or "okay" that long stops her too. A
   sound with no words (a cough) pauses her, and she resumes after 2 s.
@@ -320,7 +367,7 @@ interruption. How much later depends on your STT. In our test sessions, the call
 
 | STT | Interim transcripts | She stopped after the caller began |
 |---|---|---|
-| ElevenLabs Scribe v2 realtime (`vad_silence_threshold_secs=0.3`) | yes, about one a second | 1.3 to 2.2 s in three runs: on the interim "Wait." in one, on "Wait, which doctor did" in the others |
+| ElevenLabs Scribe v2 realtime (`vad_silence_threshold_secs=0.3`) | yes, about one a second | 1.3 to 2.2 s in four runs: on the interim "Wait." in two, on "Wait, which doctor did" in the others |
 | Sarvam saaras:v4 (`mode="transcribe"`, `negative_frames_count=8`) | none, only the final transcript | 2.4 s in every run |
 
 Sarvam's default server VAD sends the final about 0.3 s later than this setting, and she stops correspondingly later.
@@ -333,36 +380,50 @@ which of the first words Cue already reads as STOP.
 |---|---|---|
 | `threshold` | 0.5 words only; 0.3 with Smart Turn | Below it, LiveKit waits `max_delay` |
 | `endpointing.min_delay` | 0.3 s | Silence before replying when Cue says the caller is likely done (already passed when Cue is asked, see above) |
-| `endpointing.max_delay` | 2.0 s | Silence before replying when not. Cue's own waits are 1.75 s for MID_THOUGHT and 2.25 s for HOLDING (`cue.WAITS`) |
+| `endpointing.max_delay` | 2.0 s | Silence before replying when not. With `graded_waits`, Cue's own 1.75 s (MID_THOUGHT) to 2.25 s (HOLDING) instead |
 | `timeout` | 1.0 s | A later answer counts as none |
 | `chars_per_s` | 14 | Her speaking rate, for barge-in |
 
 LiveKit's turn-detector interface has two waits, so Cue's four answers collapse to one probability against one
 threshold: MID_THOUGHT and HOLDING both get `max_delay`.
 
-For Cue's own graded waits, pass `graded_waits=True` and call `detector.attach(session)`. When Cue says the caller is
-not done, the detector sets LiveKit's `max_delay` to `cue.wait(probs)` before answering: 1.75 s for MID_THOUGHT and
-2.25 s for HOLDING, blended by the probabilities. It works because LiveKit 1.8.1 reads `max_delay` after the detector
-answers. It needs the default fixed endpointing mode, and it was checked only on 1.8.1.
+For Cue's own graded waits, pass `graded_waits=True` and call `detector.attach(session)`.
+
+- **When it applies.** When Cue's words say the caller is not done, the detector sets LiveKit's `max_delay` for that
+  turn before answering. The wait is between 1.75 s (MID_THOUGHT) and 2.25 s (HOLDING), blended by their
+  probabilities.
+- **Every other turn** gets the `max_delay` that was in force before: finished turns, turns the fallback decides, no
+  answer, other languages, and a Smart Turn veto (Cue's words say done, the voice says not).
+- **What it changes.** Only `max_delay`, on LiveKit's live endpointing. An Agent's own endpointing and `min_delay`
+  are kept, and after an agent handoff the new agent's own `max_delay` is the one put back.
+- **Requirements.** LiveKit must read `max_delay` after the detector answers, which 1.7.1, 1.8.1 and 1.8.7 all do.
+  It needs the default fixed endpointing mode, and leaves dynamic endpointing alone.
 
 ## What has been tested, and what hasn't
 
 **Tested:**
 
-- **Unit tests.** `tests/test_livekit.py` (29 tests) runs against a fake Cue server, LiveKit's own `ChatContext`, and
-  a fake session that follows LiveKit 1.8.1's speech handles. It covers:
+- **Unit tests.** `tests/test_livekit.py` (39 tests) runs against a fake Cue server, LiveKit's own `ChatContext`, and
+  a fake session that follows LiveKit's speech handles. All 39 pass on livekit-agents 1.7.1, 1.8.1 and 1.8.7. It
+  covers:
   - the inputs and request body for both prompts;
   - p(done) against the threshold;
-  - the timeout and failure fallbacks;
+  - no answer, with and without a fallback detector, the fallback's own threshold and timeout, a fallback that
+    declines or fails, a second Cue server as the fallback, and refusing a streaming detector;
+  - a status on every turn;
   - Smart Turn's √ weighting, its parallel run and its failure fallback;
   - the language filter;
   - barge-in on final and interim transcripts;
   - reading only what she has said;
-  - each of the barge-in situations in the table above, a tool's reply, queued speeches, segments and graded waits;
+  - each of the barge-in situations in the table above, a tool's reply, queued speeches and segments;
+  - graded waits: putting the `max_delay` back, keeping an Agent's own endpointing across a handoff, a Smart Turn
+    veto and dynamic endpointing;
+  - keeping and opening the connection to the Cue server;
   - resampling 48 kHz stereo audio for Smart Turn.
 
   Run them from the repo root with `pip install -e . -e "./livekit[test]" && pytest livekit/tests`.
-- **Real LiveKit 1.8.1 sessions**, with a scripted LLM and a real-time audio output, one per tricky situation:
+- **Real LiveKit sessions** on 1.7.1, 1.8.1 and 1.8.7, with a scripted LLM and a real-time audio output, one per
+  tricky situation. Each gives the same outcome on all three versions:
   - a tool running after she has spoken;
   - a tool's reply, being written and playing;
   - a reply queued behind a greeting that is still playing;
@@ -372,10 +433,20 @@ answers. It needs the default fixed endpointing mode, and it was checked only on
   - her speech ending, with another queued, while Cue is answering;
   - a reply sent to the TTS in segments;
   - a `say()` with recorded audio;
-  - a backchannel in the last moments of her speech.
-- **Scripted live calls.** These used Silero VAD, an STT (Sarvam saaras:v4 or ElevenLabs Scribe v2 realtime, set as
-  in the stop-time table above), Gemma 4 E4B for her replies and ElevenLabs TTS. The caller was played from audio clips in real time, with `aec_warmup_duration=None` because a
-  simulated line has no echo. To test the wiring, Cue was a stand-in server with fixed answers:
+  - a backchannel in the last moments of her speech;
+  - graded waits with an Agent's own endpointing (its `min_delay` kept, its `max_delay` put back).
+- **LiveKit's own turn-taking code driving the detector** on all three versions: VAD end of speech, then an STT final.
+  LiveKit asks in the same order on all three (language, prediction, threshold). The turn commits at the same times:
+  0.91 s after the caller stopped on DONE, 2.0 s on MID_THOUGHT. With Cue down and a fallback answering 0.2 against
+  its own threshold of 0.6, LiveKit waited `max_delay`, as it should.
+- **Scripted live calls**, on livekit-agents 1.8.1 with the code as published here. These used:
+  - Silero VAD;
+  - an STT: Sarvam saaras:v4 or ElevenLabs Scribe v2 realtime, set as in the stop-time table above;
+  - Gemma 4 E4B for her replies;
+  - ElevenLabs TTS.
+
+  The caller was played from audio clips in real time, with `aec_warmup_duration=None` because a simulated line has
+  no echo. To test the wiring, Cue was a stand-in server with fixed answers:
   - "wait", or three words or more: STOP;
   - two words or fewer: CONTINUE;
   - one to nine digits: MID_THOUGHT;
@@ -387,12 +458,12 @@ answers. It needs the default fixed endpointing mode, and it was checked only on
   - "Wait, which doctor did you say?" over her reply stopped her, and she answered it;
   - "My number is 98450." waited, and "1 2 3 4 5." joined it in one turn.
 
-  | Setup | Checks passed (last run, final code) | Notes |
+  | Setup | Checks passed | Notes |
   |---|---|---|
-  | Sarvam STT | 8 of 9 | Every behaviour check passed. The miss is the harness's own "exactly one STOP" check: the request arrived as two finals, she began answering the first, and the second rightly got a STOP of its own. Earlier runs passed all 9 |
-  | Sarvam STT with Smart Turn | 9 of 9 | An earlier run missed one: the STT dropped "had knee pain" from the request, which was still answered |
-  | Sarvam STT, base Gemma 4 E4B as Cue | 8 of 8 | Cue v1's base model, not the fine-tune, served by llama.cpp on a T4 in Mumbai with the same prompts. Decisions took 121 to 560 ms across three runs, including the network |
-  | ElevenLabs STT | 9 of 9 | Earlier runs passed 7 of 9: ElevenLabs connection resets on our account lost words or delayed a final by seconds, plus the same "one STOP" check |
+  | Sarvam STT | 9 of 9 | An earlier version once missed the harness's own "exactly one STOP" check: the request arrived as two finals, and the second rightly got a STOP of its own |
+  | Sarvam STT with Smart Turn | 9 of 9 | |
+  | Sarvam STT, base Gemma 4 E4B as Cue | 8 of 8 | Cue v1's base model, not the fine-tune, served by llama.cpp on a T4 in Mumbai with the same prompts, through Caddy over TLS. With the kept connection, decisions took 80 to 175 ms including the network, against 121 to 560 ms before it |
+  | ElevenLabs STT | 8 of 9 | The STT dropped a digit ("8450"), so Cue rightly kept waiting on nine. Earlier runs also lost words to ElevenLabs connection resets on our account |
 
 **Not measured:**
 
@@ -401,6 +472,8 @@ answers. It needs the default fixed endpointing mode, and it was checked only on
 - **The words-only setup** on any benchmark.
 - **The thresholds above.**
 - **The barge-in decision** on any public set.
+- **The fallback with LiveKit's real `MultilingualModel`.** It was tested with a stand-in detector that follows the
+  same interface.
 
 Measure on your own calls before relying on any of them.
 

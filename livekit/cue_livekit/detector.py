@@ -1,4 +1,4 @@
-"""Cue v1 in a LiveKit Agents voice agent (built and tested on livekit-agents 1.8.1).
+"""Cue v1 in a LiveKit Agents voice agent (tested on livekit-agents 1.7.1, 1.8.1 and 1.8.7).
 
 LiveKit takes a turn detector in ``turn_handling["turn_detection"]``: an object it asks, once the caller has paused
 and there are words, for p(the turn is over). Below its threshold, LiveKit waits ``endpointing.max_delay`` before
@@ -30,7 +30,9 @@ import time
 from pathlib import Path
 from typing import Any, AsyncIterable, AsyncIterator
 
-from cue.client import Cue, p_end, wait, with_voice
+import httpx
+
+from cue.client import WAITS, Cue, p_end, wait, with_voice
 from cue.decision import UNPUNCTUATED, Decision, ending, last_question, load
 
 log = logging.getLogger("cue.livekit")
@@ -39,6 +41,9 @@ log = logging.getLogger("cue.livekit")
 _PROMPT_DIRS = (Path(__file__).resolve().parent / "prompts", Path(__file__).resolve().parents[2] / "prompts")
 
 # the end-of-turn inputs this adapter fills: the phone prompt's four and the dialogue prompt's three
+# graded waits when Cue's words say the caller is not done: blended over the not-done answers only (1.75 to 2.25 s)
+NOT_DONE_WAITS = {o: WAITS[o] for o in ("MID_THOUGHT", "HOLDING")}
+
 PHONE_INPUTS = ("agent_question", "caller_earlier", "caller_text", "transcript_end")
 DIALOGUE_INPUTS = ("Other person last said", "Speaker said", "Speaker's words end with")
 
@@ -107,6 +112,10 @@ def _language(code: Any) -> str:
         return str(code).split("-")[0].split("_")[0].lower()
 
 
+def _str(language: Any) -> str | None:
+    return str(language) if language else None
+
+
 def _speech_handle() -> Any:
     """The LiveKit speech a tts_node is synthesising (None if this LiveKit version does not say)."""
     try:
@@ -123,16 +132,24 @@ class CueTurnDetector:
     sqrt(Smart Turn), so start lower (0.3) and tune on your calls. ``timeout``: an answer later than this counts as
     no answer, and a turn with no answer is treated as done. ``languages``: the only languages Cue decides for (any
     form: "en", "hi-IN", "english"); for others the turn is treated as done (and barge-in still runs).
-    ``graded_waits``: when Cue says the caller is not done, wait ``cue.wait(probs)`` (MID_THOUGHT 1.75 s, HOLDING
-    2.25 s, blended) instead of LiveKit's one ``max_delay``; needs ``attach(session)`` and LiveKit's fixed endpointing
-    mode (the default), and relies on LiveKit 1.8.1 reading ``max_delay`` after the detector answers."""
+    ``fallback``: a text turn detector with ``predict_end_of_turn`` (``MultilingualModel()`` or ``EnglishModel()`` from
+    livekit-plugins-turn-detector; LiveKit's streaming ``inference.TurnDetector`` cannot be one) that decides when Cue
+    gives no answer in time and for languages outside ``languages``; without one those turns are treated as done.
+    ``graded_waits``: when Cue's words say the caller is not done, wait between 1.75 s (MID_THOUGHT) and 2.25 s
+    (HOLDING), blended by their probabilities, instead of LiveKit's one ``max_delay``, which is put back on every other
+    turn; needs ``attach(session)`` and LiveKit's fixed endpointing mode (the default), and relies on LiveKit reading
+    ``max_delay`` after the detector answers (1.7.1 to 1.8.7 do). ``keepalive_s``: how long the client keeps the
+    connection to the Cue server between decisions (the server or a proxy in front of it must keep it too)."""
 
     def __init__(self, base_url: str = "http://localhost:8090/v1", *, model: str = "cue", api_key: str = "x",
                  end_of_turn: str | Path | None = None, barge_in: bool | str | Path = False,
                  threshold: float = 0.5, smart_turn: Any = None, timeout: float = 1.0, languages: Any = None,
-                 punctuated: bool = True, graded_waits: bool = False, chars_per_s: float = 14.0,
-                 stop_without_answer: int = 3) -> None:
+                 punctuated: bool = True, graded_waits: bool = False, fallback: Any = None,
+                 chars_per_s: float = 14.0, stop_without_answer: int = 3, keepalive_s: float = 60.0) -> None:
         self.cue = Cue(base_url, model, api_key, timeout=max(timeout, 1.0) + 1.0)
+        # keep the connection between decisions: httpx drops an idle one after 5 s, and a caller's turns are further
+        # apart than that (measured over TLS: 141 ms a decision on a new connection, 67 ms on a kept one)
+        self.cue._async = httpx.AsyncClient(timeout=self.cue.timeout, limits=httpx.Limits(keepalive_expiry=keepalive_s))
         self.eot: Decision = load(end_of_turn or prompt("end_of_turn_phone"))
         unknown = [n for n in self.eot.inputs if n not in PHONE_INPUTS + DIALOGUE_INPUTS]
         if unknown:
@@ -143,6 +160,17 @@ class CueTurnDetector:
         if barge_in:
             self.barge = load(prompt("barge_in") if barge_in is True else barge_in)
         self.threshold, self.timeout, self.punctuated, self.graded_waits = threshold, timeout, punctuated, graded_waits
+        if fallback is not None and not callable(getattr(fallback, "predict_end_of_turn", None)):
+            raise TypeError("fallback must be a text turn detector with predict_end_of_turn, such as MultilingualModel() "
+                            "or EnglishModel(); LiveKit's streaming inference.TurnDetector cannot be one")
+        self.fallback = fallback
+        self._fell_back = False                  # this turn was decided by the fallback (its threshold applies)
+        # graded waits: the endpointing they changed, its own max_delay (put back on every other turn), and whether
+        # it currently holds a graded value
+        self._graded_ep: Any = None
+        self._base_max_delay: float | None = None
+        self._graded = False
+        self._warm_task: asyncio.Task | None = None
         self.smart_turn = smart_turn
         self.languages = {_language(x) for x in languages} if languages else None
         self.chars_per_s, self.stop_without_answer = chars_per_s, stop_without_answer
@@ -158,7 +186,9 @@ class CueTurnDetector:
         # barge-in on interim transcripts: the caller's latest words over her, and the task asking about them
         self._heard = ""
         self._barge_task: asyncio.Task | None = None
-        self.last_end_of_turn: dict[str, Any] = {}    # the last answered end-of-turn decision, for your logs
+        # every end-of-turn call, for your logs: status "cue" (Cue answered), "fallback" (the fallback decided),
+        # "no_answer" (no answer, treated as done) or "skipped" (no words, a backchannel over her, another language)
+        self.last_end_of_turn: dict[str, Any] = {}
         self.last_barge_in: dict[str, Any] = {}       # the last barge-in decision
 
     # -- LiveKit's turn detector interface -----------------------------------------------------------
@@ -170,22 +200,42 @@ class CueTurnDetector:
     def provider(self) -> str:
         return "pype"
 
-    async def unlikely_threshold(self, language: Any = None) -> float:
+    async def unlikely_threshold(self, language: Any = None) -> float | None:
+        if self._fell_back:                      # LiveKit asks right after predict_end_of_turn: the fallback's scale
+            try:
+                return await self.fallback.unlikely_threshold(language)
+            except Exception:
+                return self.threshold
         return self.threshold
 
     async def supports_language(self, language: Any = None) -> bool:
-        """Cue v1 was trained on English; on eot-bench it ran on 14 languages with the English prompt. With barge-in
-        on, always True: LiveKit only calls predict_end_of_turn for a supported language, and barge-in lives there."""
+        """Cue v1 was trained on English; on eot-bench it ran on 14 languages with the English prompt. LiveKit only
+        calls predict_end_of_turn for a supported language, so this is also True when barge-in is on (barge-in lives
+        there) or when the fallback detector supports the language (it decides those turns)."""
         self._language = language
-        return self.barge is not None or self._decides(language)
+        if self.barge is not None or self._decides(language):
+            return True
+        if self.fallback is not None:
+            try:
+                if await self.fallback.supports_language(language):
+                    return True
+            except Exception:
+                pass
+        # LiveKit will not ask about this turn: record it, so last_end_of_turn is not left on the previous one
+        self._set_max_delay(None)
+        self.last_end_of_turn = {"status": "skipped", "language": _str(language), "p": None, "caller_text": "",
+                                 "reason": "language"}
+        return False
 
     def _decides(self, language: Any) -> bool:
         return self.languages is None or language is None or _language(language) in self.languages
 
     async def predict_end_of_turn(self, chat_ctx: Any, *, timeout: float | None = None) -> float:
+        self._fell_back = False
+        language = self._language
         inputs = end_of_turn_inputs(chat_ctx, punctuated=self.punctuated)
         if inputs is None:
-            return 1.0
+            return self._done("skipped", language, reason="no_words")
         if self.barge is not None:
             if self._barge_task is not None and not self._barge_task.done():
                 await asyncio.wait({self._barge_task}, timeout=self.timeout + 1.5)    # an interim decision, in flight
@@ -195,22 +245,22 @@ class CueTurnDetector:
                     # say "done" so it commits now, and forget their audio
                     if self.smart_turn is not None:
                         self.smart_turn.reset()
-                    return 1.0
+                    return self._done("skipped", language, inputs, reason="backchannel")
             # her next speech has made no sound yet (the LLM writing, the TTS synthesising, or queued behind one that
             # just ended) and the caller went on: the turn was not over. Drop it, or LiveKit would skip these words
             await self._drop_unheard()
-        if not self._decides(self._language):
-            return 1.0
+        if not self._decides(language):
+            return await self._fall_back(chat_ctx, timeout, language, inputs, reason="language")
         t0 = time.perf_counter()
         # Smart Turn (CPU, ~100 ms) runs beside the Cue question, not after it
         heard = asyncio.ensure_future(asyncio.to_thread(self.smart_turn.predict)) if self.smart_turn is not None else None
         try:
             probs = await asyncio.wait_for(self.cue.aask(self.eot, inputs), timeout or self.timeout)
-        except Exception as e:                    # late, down, refused: the turn goes on as done
-            log.warning("cue: no end-of-turn answer (%s): treating the turn as done", type(e).__name__)
+        except Exception as e:                    # late, down, refused: the fallback decides, or the turn is done
             if heard is not None:
                 heard.cancel()
-            return 1.0
+            return await self._fall_back(chat_ctx, timeout, language, inputs, reason="no_answer",
+                                         error=type(e).__name__)
         ms = (time.perf_counter() - t0) * 1000
         voice = None
         if heard is not None:
@@ -221,27 +271,96 @@ class CueTurnDetector:
         p = with_voice(probs, voice) if voice is not None else p_end(probs)
         if self.barge is not None:
             await self._drop_unheard()            # a queued speech may have become hers while Cue was answering
-        if self.graded_waits and p < self.threshold and self.session is not None:
-            try:                                  # LiveKit 1.8.1 reads max_delay after the detector has answered
-                self.session.update_options(endpointing_opts={"max_delay": wait(probs)})
-            except Exception as e:
-                log.warning("cue: graded wait not set: %r", e)
+        # graded: only when Cue's words say not done (a Smart Turn veto keeps the session's own max_delay)
+        self._set_max_delay(wait(probs, NOT_DONE_WAITS) if p < self.threshold and p_end(probs) < self.threshold
+                            else None)
         best = max(probs, key=probs.get)
-        self.last_end_of_turn = {"option": best, "probs": probs, "smart_turn": voice, "p": p, "ms": ms,
-                                 "caller_text": inputs["caller_text"]}
+        self.last_end_of_turn = {"status": "cue", "language": _str(language), "option": best, "probs": probs,
+                                 "smart_turn": voice, "p": p, "ms": ms, "caller_text": inputs["caller_text"]}
         log.info("cue: end_of_turn %s p(done)=%.2f%s -> %s (%.0f ms) %r", best, p_end(probs),
                  f" smart_turn={voice:.2f} p={p:.2f}" if voice is not None else "",
                  "reply" if p >= self.threshold else "wait", ms, inputs["caller_text"][-60:])
         return p
 
+    async def _fall_back(self, chat_ctx: Any, timeout: float | None, language: Any, inputs: dict, *, reason: str,
+                         error: str | None = None) -> float:
+        """A turn Cue does not decide: the fallback detector does if there is one and it supports the language, else
+        the turn is treated as done (min_delay), as LiveKit does without a detector."""
+        why = f"no end-of-turn answer ({error})" if error is not None else f"language {language} is not Cue's"
+        fallback: dict[str, Any] = {}
+        if self.fallback is not None:
+            t0 = time.perf_counter()
+            try:
+                if await self.fallback.supports_language(language):
+                    # its own budget: LiveKit passes no timeout, and the fallback's default (3 s) is longer than ours
+                    p = float(await self.fallback.predict_end_of_turn(
+                        chat_ctx, timeout=timeout if timeout is not None else self.timeout))
+                    self._fell_back = True
+                    log.info("cue: %s: the fallback decided p=%.2f", why, p)
+                    return self._done("fallback", language, inputs, reason=reason, error=error, p=p,
+                                      ms=(time.perf_counter() - t0) * 1000)
+                fallback = {"fallback": "declined"}   # e.g. MultilingualModel with no language from the STT
+            except Exception as e:
+                fallback = {"fallback": "failed", "fallback_error": type(e).__name__}
+        if error is not None:
+            log.warning("cue: %s: %s", why, "treating the turn as done" if not fallback
+                        else f"the fallback {fallback['fallback']}: treating the turn as done")
+        return self._done("no_answer" if reason == "no_answer" else "skipped", language, inputs, reason=reason,
+                          error=error, **fallback)
+
+    def _done(self, status: str, language: Any, inputs: dict | None = None, *, p: float = 1.0, **extra: Any) -> float:
+        """Record a turn Cue did not answer, and return what LiveKit gets (1.0: done, unless the fallback said)."""
+        self._set_max_delay(None)
+        self.last_end_of_turn = {"status": status, "language": _str(language), "p": p,
+                                 "caller_text": (inputs or {}).get("caller_text", ""),
+                                 **{k: v for k, v in extra.items() if v is not None}}
+        return p
+
+    def _endpointing(self) -> Any:
+        """LiveKit's live endpointing object (the session's, merged with the current Agent's)."""
+        recognition = getattr(getattr(self.session, "_activity", None), "_audio_recognition", None)
+        return getattr(recognition, "_endpointing", None)
+
+    def _set_max_delay(self, seconds: float | None) -> None:
+        """Graded waits: Cue's wait for this turn, or (None) the endpointing's own max_delay back. Changes only
+        max_delay on LiveKit's live endpointing object, so min_delay and an Agent's own endpointing are kept."""
+        if not self.graded_waits or self.session is None:
+            return
+        ep = self._endpointing()
+        if ep is None or type(ep).__name__ != "BaseEndpointing":    # fixed mode only: dynamic learns its own delays
+            return
+        if ep is not self._graded_ep:            # new: the call starts, an agent handoff, update_options
+            self._graded_ep, self._base_max_delay, self._graded = ep, ep.max_delay, False
+        try:
+            if seconds is not None:
+                ep.update_options(max_delay=seconds)
+                self._graded = True
+            elif self._graded:
+                ep.update_options(max_delay=self._base_max_delay)
+                self._graded = False
+        except Exception as e:
+            log.warning("cue: graded wait not set: %r", e)
+
+    async def warm(self) -> None:
+        """Open the connection to the Cue server now, so the call's first decision does not pay for it."""
+        try:
+            base = self.cue.url.rsplit("/chat/completions", 1)[0]
+            await self.cue._async.get(f"{base}/models", headers=self.cue.headers, timeout=2.0)
+        except Exception as e:
+            log.info("cue: warm-up failed (%r): the first decision opens the connection", e)
+
     # -- following the session ---------------------------------------------------------------------------
     def attach(self, session: Any) -> CueTurnDetector:
         """Follow the session: which of her speeches is playing (barge-in reads what she has said of it; Smart Turn
         starts a new window of the caller's audio), and the caller's interim transcripts (barge-in). Call it once,
-        after creating the AgentSession."""
+        after creating the AgentSession. It also opens the connection to the Cue server."""
         self.session = session
         if self.smart_turn is not None:
             self.smart_turn.reset()
+        try:
+            self._warm_task = asyncio.get_running_loop().create_task(self.warm())
+        except RuntimeError:                      # no event loop yet: the first decision opens the connection
+            pass
 
         @session.on("agent_state_changed")
         def _state(ev) -> None:
@@ -391,6 +510,7 @@ class CueTurnDetector:
             yield frame
 
     async def aclose(self) -> None:
-        if self._barge_task is not None:
-            self._barge_task.cancel()
+        for task in (self._barge_task, self._warm_task):
+            if task is not None:
+                task.cancel()
         await self.cue.aclose()

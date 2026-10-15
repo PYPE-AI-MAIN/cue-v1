@@ -6,7 +6,7 @@ readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.10"
 # cue-turn is the client in this repo's root (not on PyPI): install it from the clone or the git URL (README.md)
-dependencies = ["cue-turn", "livekit-agents[silero]>=1.8.1,<1.9", "numpy", "onnxruntime", "huggingface_hub"]
+dependencies = ["cue-turn", "livekit-agents[silero]>=1.7.1,<1.9", "numpy", "onnxruntime", "huggingface_hub"]
 
 [project.optional-dependencies]
 test = ["pytest"]
