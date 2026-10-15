@@ -15,6 +15,7 @@ letter, normalised over the options. Nothing is generated beyond that token.
 from __future__ import annotations
 
 import math
+import os
 from functools import lru_cache
 
 import httpx
@@ -56,8 +57,12 @@ def read(decision: Decision, response: dict) -> dict[str, float]:
 
 
 class Cue:
-    def __init__(self, base_url: str = "http://localhost:8090/v1", model: str = "cue", api_key: str = "x",
+    def __init__(self, base_url: str | None = None, model: str = "cue", api_key: str | None = None,
                  timeout: float = 30.0) -> None:
+        """``base_url`` and ``api_key`` default to the CUE_URL and CUE_API_KEY environment variables, then to
+        http://localhost:8090/v1 and "x" (llama-server ignores the key unless it was started with one)."""
+        base_url = base_url or os.environ.get("CUE_URL") or "http://localhost:8090/v1"
+        api_key = api_key or os.environ.get("CUE_API_KEY") or "x"
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model = model
         self.headers = {"Authorization": f"Bearer {api_key}"}

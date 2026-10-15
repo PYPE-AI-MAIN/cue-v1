@@ -154,7 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     d.set_defaults(fn=demo_cmd)
 
     for p in (q, d):                                  # which server to ask
-        p.add_argument("--url", help=f"a running Cue server (default {DEFAULT_URL}, started if nothing answers)")
+        p.add_argument("--url", default=os.environ.get("CUE_URL"), help=f"a running Cue server (default $CUE_URL, else {DEFAULT_URL}, "
+                       "started if nothing answers)")
         p.add_argument("--api-key", default=os.environ.get("CUE_API_KEY"), help="if the server needs one "
                        "(default: $CUE_API_KEY)")
         p.add_argument("--model", default="cue", help="the model name the server expects (llama-server ignores it)")
