@@ -45,11 +45,10 @@ running and lets you use it: from a terminal, from your own code, or in [LiveKit
 
 ## Watch it on a live call
 
-<a href="assets/cue-v1-phone-number.mp4"><img src="assets/cue-v1-phone-number.jpg" alt="A live call with Cue v1 deciding the end of the caller's turn: after 'Yeah, so my number is', Cue answers MID_THOUGHT 0.99 and the agent keeps listening. The image links to the 38-second video." width="1200" /></a>
+https://github.com/user-attachments/assets/539d41b5-c190-4e3b-91f2-87def836bb1a
 
-A live call in Shortwire, our voice stack, with Cue v1 deciding when the caller's turn ends
-([the video file](assets/cue-v1-phone-number.mp4), 38 s with sound; GitHub offers it as a download rather than playing
-it in the page):
+A live call in Shortwire, our voice stack, with Cue v1 deciding when the caller's turn ends (38 s; unmute for the
+caller's voice, or [download it](assets/cue-v1-phone-number.mp4)):
 
 1. The agent asks for a mobile number. The caller says "Yeah, so my number is…" and pauses. Cue answers
    **MID_THOUGHT (0.99)**, so the agent keeps listening instead of replying.
