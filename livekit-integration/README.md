@@ -173,12 +173,37 @@ CueTurnDetector(
 - **The dialogue prompt** reads her last message and the caller's words, as it was trained. For two people talking,
   use it with `graded_waits=True` and without Smart Turn: in our two-person tests, adding Smart Turn made it slightly
   worse.
-- **Your own prompt JSON** (in the format of `cue/prompts/`) must read one of the two shipped input sets. These are the
-  phone prompt's `agent_question`, `caller_earlier`, `caller_text` and `transcript_end`, or the dialogue prompt's three.
-  The detector raises `ValueError` for anything else.
+- **Your own prompt:** see [Use your own prompt](#use-your-own-prompt) below.
 - **Languages.** Cue v1 ran 14 languages on its English prompt on eot-bench. For a language outside `languages`, the
   fallback detector decides if it supports the language; otherwise the turn is treated as done (`min_delay`). With
   barge-in on, barge-in still runs for those languages.
+
+### Use your own prompt
+
+Cue reads its questions from small JSON files (the shipped ones are in `cue/prompts/`: the options, what each one
+means, the inputs and worked examples). The detector takes two parameters to replace them with your own:
+
+```python
+from cue_livekit import CueTurnDetector, prompt
+
+CueTurnDetector(
+    "http://localhost:8090/v1",
+    end_of_turn="my_end_of_turn.json",   # replaces the end-of-turn prompt (default: the shipped phone prompt)
+    barge_in="my_barge_in.json",         # barge-in on, with your prompt (barge_in=True uses the shipped one)
+)
+```
+
+- `end_of_turn` and `barge_in` take a path to your JSON file, or a shipped one with `prompt("end_of_turn_dialogue")`.
+- Easiest start: copy a shipped file from `cue/prompts/`, change its descriptions or examples, and pass its path.
+- **Keep the option names.** The detector reads `DONE`, `LIKELY_DONE`, `MID_THOUGHT` and `HOLDING` for end of turn, and `STOP` and
+  `CONTINUE` for barge-in.
+- **Keep the inputs the detector can fill.** End of turn: the phone prompt's `agent_question`, `caller_earlier`,
+  `caller_text` and `transcript_end`, or the dialogue prompt's three. Barge-in: `agent_said`, `agent_question` and
+  `caller_text`. An end-of-turn prompt with any other input raises `ValueError` when the detector is created; a
+  barge-in prompt is not checked up front, so try it once before a call.
+- **Test it on your own calls first.** Cue v1 was fine-tuned on the shipped prompts and benchmarked with them. A prompt
+  you change can make it answer differently: check the `cue: end_of_turn ...` log lines on real calls, and compare
+  with the shipped prompt before relying on it.
 
 ### When Cue cannot answer: a fallback
 
