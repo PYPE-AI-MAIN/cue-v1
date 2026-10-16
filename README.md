@@ -220,7 +220,11 @@ with the flags Cue v1 was benchmarked with. The options:
 | `--gpu-layers 0` | CPU only: it works, but slower |
 | `--model` | A local GGUF instead of the download |
 
-Clients pass the same key: `Cue(url, api_key=...)`, or `cue ask --api-key`.
+Clients pass the same key: `Cue(url, api_key=...)`, or `cue ask --api-key`. Both also read the `CUE_URL` and `CUE_API_KEY`
+environment variables when you pass nothing.
+
+On a GPU machine with Docker, `docker compose up -d` runs the same server (set `CUE_API_KEY` first; it needs the NVIDIA
+container toolkit).
 
 **llama-server** comes from llama.cpp:
 - **macOS:** `brew install llama.cpp`.
@@ -246,6 +250,28 @@ name it serves, `Cue(url, model="...")`. llama-server ignores the name.
 
 **Speed.** One NVIDIA T4 answers about 13 decisions a second: 79 ms each one at a time, under 200 ms two at once.
 That is roughly 20 concurrent calls per T4, an estimate ([Speed and cost](eot-results/README.md#speed-and-cost)).
+
+
+### Deploy on EC2, GCP or any cloud
+
+Cue is one container on one GPU. `deploy/install.sh` sets it up on a fresh NVIDIA GPU machine running Ubuntu or Debian. It installs Docker and the NVIDIA container toolkit, starts Cue, and prints the URL and API key.
+
+1. **Launch a GPU VM** with a driver already installed (one T4 is enough): on AWS a `g4dn.xlarge` with the Deep Learning AMI (Ubuntu), on GCP an `n1` machine with a T4 and a Deep Learning VM image. Give it a 50 GB disk.
+2. **Run the script**, either by pasting it into "user data" (AWS) or "startup script" (GCP) when you launch, or over SSH:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/PYPE-AI-MAIN/cue-v1/main/deploy/install.sh | sudo bash
+   ```
+   Set `CUE_API_KEY=...` first to pick your own key; otherwise one is generated and printed.
+3. **Wait for the first start** (it downloads the 8 GB model): `sudo docker compose -f /opt/cue/docker-compose.yml logs -f`.
+4. **Point your agent at it:**
+   ```bash
+   export CUE_URL=http://<vm-ip>:8090/v1
+   export CUE_API_KEY=<the printed key>
+   cue ask "It is nine eight four five six seven one two three four." --agent-said "What is your number?"
+   ```
+   Cue, `CueTurnDetector` and `cue ask` all read `CUE_URL` and `CUE_API_KEY`.
+
+Open port 8090 only to your agent's IP or security group, and run the agent in the same region and VPC as Cue: every reply waits for one decision. For HTTPS, put Caddy or nginx in front (see the [LiveKit guide](livekit-integration/README.md)).
 
 ## Prompts
 

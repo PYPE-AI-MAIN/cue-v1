@@ -48,3 +48,13 @@ def test_using_the_answer():
     assert p_end(probs) == 0.75
     assert with_voice(probs, 0.25) == pytest.approx(0.375)
     assert wait(probs) == pytest.approx(0.5 * 0.5 + 0.25 * 1.0 + 0.25 * 1.75)
+
+
+def test_url_and_key_default_to_environment(monkeypatch):
+    from cue import Cue
+    monkeypatch.setenv("CUE_URL", "https://example.test/v1/")
+    monkeypatch.setenv("CUE_API_KEY", "secret")
+    c = Cue()
+    assert c.url == "https://example.test/v1/chat/completions"
+    assert c.headers["Authorization"] == "Bearer secret"
+    assert Cue("http://other/v1", api_key="k").url == "http://other/v1/chat/completions"

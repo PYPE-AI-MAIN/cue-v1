@@ -122,7 +122,7 @@ once, plus the network. On the "not done" path it comes out of `max_delay`.
 
 The client keeps its connection to the Cue server open between decisions (`keepalive_s`, default 60 s), and
 `attach(session)` opens it when the call starts. A caller's turns are usually more than 5 s apart, and a new
-connection per decision costs time: through Caddy over TLS to our box, a decision on a new connection took a median
+connection per decision costs time: through Caddy over TLS to a remote T4, a decision on a new connection took a median
 of 141 ms, and on a kept one 67 ms. The server end has to keep the connection too. llama-server closes idle
 connections after 5 s (its HTTP library's default), so put a reverse proxy with a longer idle timeout in front of it
 (Caddy's default, or nginx with `keepalive_timeout 75s`) to get the saving.

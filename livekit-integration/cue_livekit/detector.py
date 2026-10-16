@@ -129,7 +129,7 @@ class CueTurnDetector:
     ``max_delay`` after the detector answers (1.7.1 to 1.8.7 do). ``keepalive_s``: how long the client keeps the
     connection to the Cue server between decisions (the server or a proxy in front of it must keep it too)."""
 
-    def __init__(self, base_url: str = "http://localhost:8090/v1", *, model: str = "cue", api_key: str = "x",
+    def __init__(self, base_url: str | None = None, *, model: str = "cue", api_key: str | None = None,
                  end_of_turn: str | Path | None = None, barge_in: bool | str | Path = False,
                  threshold: float = 0.5, smart_turn: Any = None, timeout: float = 1.0, languages: Any = None,
                  punctuated: bool = True, graded_waits: bool = False, fallback: Any = None,
