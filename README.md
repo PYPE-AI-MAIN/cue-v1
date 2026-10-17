@@ -159,7 +159,8 @@ session = AgentSession(..., turn_handling={"turn_detection": CueTurnDetector("ht
 ```
 
 It also adds Smart Turn on the caller's audio, a fallback for when Cue doesn't answer, and Cue-decided barge-in. The
-guide, with code for each: **[livekit-integration/](livekit-integration/README.md)**.
+guide, with code for each: **[livekit-integration/](livekit-integration/README.md)**. Step by step, from install to a cloud
+GPU: **[Quickstart](livekit-integration/README.md#quickstart)**.
 
 ## Benchmarks
 
