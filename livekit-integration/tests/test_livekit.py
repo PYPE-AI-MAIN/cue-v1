@@ -741,7 +741,9 @@ def test_the_connection_is_kept_between_decisions_and_opened_on_attach():
         await asyncio.sleep(0.05)
         await det.aclose()
     run(main())
-    assert seen == [("GET", "http://cue.test/v1/models", "Bearer k")]
+    # the connection, then one throwaway question that loads the prompt into the server's cache
+    assert seen == [("GET", "http://cue.test/v1/models", "Bearer k"),
+                    ("POST", "http://cue.test/v1/chat/completions", "Bearer k")]
 
 
 # -- Smart Turn ------------------------------------------------------------------------------------------------

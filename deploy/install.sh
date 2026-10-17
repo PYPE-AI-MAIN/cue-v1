@@ -19,7 +19,12 @@ if ! docker info 2>/dev/null | grep -qi nvidia; then
   nvidia-ctk runtime configure --runtime=docker && systemctl restart docker
 fi
 
+if ! docker compose version >/dev/null 2>&1; then
+  apt-get update -qq && { apt-get install -y -qq docker-compose-plugin || apt-get install -y -qq docker-compose-v2; }
+fi
+
 mkdir -p "$DIR/models" && cd "$DIR"
+printf 'CUE_API_KEY=%s\n' "$KEY" > "$DIR/api_key" && chmod 600 "$DIR/api_key"
 cat > docker-compose.yml <<YML
 services:
   cue:
@@ -46,4 +51,4 @@ echo
 echo "Cue is starting (the first start downloads the 8 GB model: docker compose -f $DIR/docker-compose.yml logs -f)."
 echo "  CUE_URL=http://${IP}:8090/v1"
 echo "  CUE_API_KEY=$KEY"
-echo "Open port 8090 only to your agent's IP / security group."
+echo "The key is also saved in $DIR/api_key. Open port 8090 only to your agent's IP / security group."

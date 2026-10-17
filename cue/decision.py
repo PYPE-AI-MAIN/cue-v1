@@ -85,7 +85,7 @@ PROMPTS = Path(__file__).resolve().parent / "prompts"
 
 
 def prompt(name: str) -> Path:
-    """The file of a prompt shipped with Cue v1: "end_of_turn_phone", "end_of_turn_dialogue" or "barge_in"."""
+    """The file of a prompt shipped with Cue v1: "end_of_turn_phone", "end_of_turn_phone_greeting", "end_of_turn_dialogue" or "barge_in"."""
     path = PROMPTS / f"{name}.json"
     if not path.exists():
         names = ", ".join(sorted(p.stem for p in PROMPTS.glob("*.json")))

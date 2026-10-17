@@ -138,7 +138,7 @@ class CueTurnDetector:
         # keep the connection between decisions: httpx drops an idle one after 5 s, and a caller's turns are further
         # apart than that (measured over TLS: 141 ms a decision on a new connection, 67 ms on a kept one)
         self.cue._async = httpx.AsyncClient(timeout=self.cue.timeout, limits=httpx.Limits(keepalive_expiry=keepalive_s))
-        self.eot: Decision = load(end_of_turn or prompt("end_of_turn_phone"))
+        self.eot: Decision = load(end_of_turn or prompt("end_of_turn_phone_greeting"))
         unknown = [n for n in self.eot.inputs if n not in PHONE_INPUTS + DIALOGUE_INPUTS]
         if unknown:
             raise ValueError(f"{self.eot.name} reads inputs this detector cannot fill: {unknown}. "
@@ -239,6 +239,7 @@ class CueTurnDetector:
             await self._drop_unheard()
         if not self._decides(language):
             return await self._fall_back(chat_ctx, timeout, language, inputs, reason="language")
+        log.debug("cue: end_of_turn inputs %s", inputs)
         t0 = time.perf_counter()
         # Smart Turn (CPU, ~100 ms) runs beside the Cue question, not after it
         heard = asyncio.ensure_future(asyncio.to_thread(self.smart_turn.predict)) if self.smart_turn is not None else None
@@ -330,10 +331,12 @@ class CueTurnDetector:
             log.warning("cue: graded wait not set: %r", e)
 
     async def warm(self) -> None:
-        """Open the connection to the Cue server now, so the call's first decision does not pay for it."""
+        """Open the connection to the Cue server and ask it one throwaway question, so the call's first decision pays
+        neither for the connection nor for reading the long prompt (the server caches the prompt, not the question)."""
         try:
             base = self.cue.url.rsplit("/chat/completions", 1)[0]
             await self.cue._async.get(f"{base}/models", headers=self.cue.headers, timeout=2.0)
+            await asyncio.wait_for(self.cue.aask(self.eot, {name: "Hello." for name in self.eot.inputs}), 10.0)
         except Exception as e:
             log.info("cue: warm-up failed (%r): the first decision opens the connection", e)
 

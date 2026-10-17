@@ -18,8 +18,136 @@ There are two optional additions:
 Everything is in this folder, a separate package (`cue-livekit`, imported as `cue_livekit`) on top of the Cue client
 in the repo root. A complete agent with all three switches is in [`examples/livekit_agent.py`](examples/livekit_agent.py).
 
-Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**. Below, "she" is the agent and "the caller" is the person on the
+Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**; the unit tests and a console call also pass on 1.8.8. Below, "she" is the agent and "the caller" is the person on the
 line.
+
+## Quickstart
+
+Add Cue to a LiveKit agent you already have, in three steps. The finished agent is
+[`examples/minimal_agent.py`](examples/minimal_agent.py).
+
+### 1. Install it
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install "cue-turn @ git+https://github.com/PYPE-AI-MAIN/cue-v1" \
+            "cue-livekit @ git+https://github.com/PYPE-AI-MAIN/cue-v1#subdirectory=livekit-integration" \
+            "livekit-agents[openai]~=1.8" python-dotenv
+```
+
+Install it in the same environment you run the agent from, on every machine that runs the agent. Python 3.10 or newer.
+If you get `ModuleNotFoundError: No module named 'cue_livekit'`, you are in a different environment.
+
+### 2. Change your agent (three small edits)
+
+Here is a plain agent without Cue (keys in a `.env` next to it: `OPENAI_API_KEY=...`):
+
+```python
+from dotenv import load_dotenv
+from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.plugins import openai, silero
+
+load_dotenv()
+
+
+async def entrypoint(ctx: JobContext) -> None:
+    await ctx.connect()
+    session = AgentSession(
+        vad=silero.VAD.load(),
+        stt=openai.STT(),
+        llm=openai.LLM(model="gpt-4o-mini"),
+        tts=openai.TTS(),
+    )
+    await session.start(agent=Agent(instructions="You are a friendly voice assistant. Keep replies short."), room=ctx.room)
+    await session.say("Hello, how can I help you today?")
+
+
+if __name__ == "__main__":
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+```
+
+To add Cue, change three things:
+
+```python
+from cue_livekit import CueTurnDetector                      # 1. the import
+
+    detector = CueTurnDetector()                             # 2. one per call, inside entrypoint (before AgentSession)
+    session = AgentSession(
+        ...,
+        turn_handling={"turn_detection": detector,           # 3. the turn detector, and how long LiveKit waits
+                       "endpointing": {"min_delay": 0.3, "max_delay": 2.0}},
+    )
+    detector.attach(session)                                 # right after the session is created
+    ctx.add_shutdown_callback(detector.aclose)
+```
+
+`CueTurnDetector()` reads the `CUE_URL` and `CUE_API_KEY` environment variables (a `.env` works), and falls back to
+`http://localhost:8090/v1` with no key. Everything else in your agent stays as it is.
+
+### 3. Run Cue, then the agent
+
+**On your Mac** (needs `brew install llama.cpp`). In one terminal, keep Cue running; the first start downloads the model (about 8 GB):
+
+```bash
+cue serve
+```
+
+In a second terminal, check it, then run the agent:
+
+```bash
+cue ask "It is nine eight four five six seven one two three four." --agent-said "What is your number?"
+python minimal_agent.py console
+```
+
+The check should print DONE with p(done) near 1. **Use headphones**: without them the agent hears itself and cuts itself
+off. In the log, each turn shows one line:
+
+```
+cue: end_of_turn MID_THOUGHT p(done)=0.01 -> wait (60 ms) 'my number is nine eight four five'
+```
+
+Try it: say "my number is nine eight four five" and pause. Cue answers MID_THOUGHT and the agent waits.
+
+**On a cloud GPU (EC2, GCP, or any provider).** Cue is one container on one GPU:
+
+1. Launch a GPU VM that already has the NVIDIA driver (one T4 is enough): on AWS a `g4dn.xlarge` with the Deep Learning
+   AMI (Ubuntu); on GCP an `n1` machine with a T4 and a Deep Learning VM image. Give it a 50 GB disk.
+2. Open port 8090 only to your agent's IP or security group, never to the whole internet.
+3. On the VM, run the deploy script. Set `CUE_API_KEY=...` first to pick your own key, or one is generated:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/PYPE-AI-MAIN/cue-v1/main/deploy/install.sh | sudo bash
+   ```
+
+   You can also paste [`deploy/install.sh`](../deploy/install.sh) into "user data" (AWS) or "startup script" (GCP)
+   when you launch the VM. It prints `CUE_URL` and `CUE_API_KEY` and saves the key in `/opt/cue/api_key`. If you
+   used user data, they are in the boot log: `sudo cat /var/log/cloud-init-output.log` on AWS,
+   `sudo journalctl -u google-startup-scripts.service` on GCP.
+4. The first start downloads the model; watch it with `sudo docker compose -f /opt/cue/docker-compose.yml logs -f`.
+5. On the machine that runs the agent, put the two values in the `.env` next to your agent, with no code change:
+
+   ```
+   CUE_URL=http://<vm-ip>:8090/v1
+   CUE_API_KEY=<the printed key>
+   ```
+
+6. Run the same `cue ask` check, then `python minimal_agent.py console`.
+
+Run the agent in the same cloud region as Cue: every reply waits for one decision (about 50 to 120 ms on a GPU). Never
+put your keys in code or in chat.
+
+### If something goes wrong
+
+| In the log | What it means | Fix |
+|---|---|---|
+| `cue: no end-of-turn answer (ConnectError)` | Nothing is listening at `CUE_URL` | Start `cue serve`, or check the URL, the port and the firewall |
+| `cue: no end-of-turn answer (HTTPStatusError)` | The server answered with an error, usually 401 | Set `CUE_API_KEY` to the key the server was started with |
+| `cue: no end-of-turn answer (TimeoutError)` | Cue did not answer within `timeout` (1 s) | On a Mac the first decision can be slow; later ones are fast. Use a GPU server, or raise `timeout` |
+| The agent cuts itself off or hears itself | Echo from the speakers | Use headphones |
+| The agent waits a long time after "Hello" | Greetings count as unfinished in the benchmarked prompt | The default prompt of this package treats a bare greeting as finished (see [Use your own prompt](#use-your-own-prompt)) |
+
+A turn Cue does not answer is treated as finished, so the agent replies. Set a [fallback](#when-cue-cannot-answer-a-fallback)
+for production.
 
 ## 0. Install and serve Cue
 

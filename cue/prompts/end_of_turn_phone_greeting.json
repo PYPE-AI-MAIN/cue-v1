@@ -1,0 +1,121 @@
+{
+ "name": "end_of_turn",
+ "clock": "pause",
+ "priority": 2,
+ "instruction": "The caller has paused on a phone call with an agent. Is it the agent's turn now? The caller is done once they have asked their question, made their request, or answered what the agent asked (even in a different form than asked: a name, a date, a code read out), in a complete sentence. They are not done if the last words leave the sentence hanging, if they are partway through reading out a number, or if they have only greeted, given their name or set the scene without yet saying what they want. How the transcript ends is given below: a question mark almost always means they are done; no sentence end usually means more is coming.",
+ "options": [
+  {
+   "id": "DONE",
+   "describe": "finished: they asked a question, made a request, answered the agent, or confirmed or declined, or just said hello or hi, in a complete sentence. Reply now"
+  },
+  {
+   "id": "LIKELY_DONE",
+   "describe": "probably finished: a complete answer or statement that might still get one more sentence"
+  },
+  {
+   "id": "MID_THOUGHT",
+   "describe": "not finished: the sentence is left hanging (it stops on 'and', 'the', 'with', 'for', a repeated word, or a noun that needs more), a number is only partly read out. They will continue"
+  },
+  {
+   "id": "HOLDING",
+   "describe": "telling something long, a story or an explanation: a pause is them thinking. They will continue"
+  }
+ ],
+ "inputs": [
+  "agent_question",
+  "caller_earlier",
+  "caller_text",
+  "transcript_end"
+ ],
+ "examples": [
+  {
+   "inputs": {
+    "agent_question": "How can I help you today?",
+    "caller_text": "Hi, this is Priya.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "How can I help you today?",
+    "caller_text": "Hello, I booked a room with you last week and I need to change the dates.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "How can I help you today?",
+    "caller_text": "Is there a slot on Friday morning?",
+    "transcript_end": "a question mark"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "What is your booking reference?",
+    "caller_text": "it's K L nine four two two",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "agent_question": "What's your phone number?",
+    "caller_text": "sure, it's three one two, five five",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "Anything else with the pizza?",
+    "caller_text": "yes, can I get that with extra",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "Which city are you in?",
+    "caller_text": "I stay in Pune but",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "MID_THOUGHT"
+  },
+  {
+   "inputs": {
+    "agent_question": "Does that sound right?",
+    "caller_text": "Yes, that's right.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "DONE"
+  },
+  {
+   "inputs": {
+    "caller_text": "yeah it was fine I guess",
+    "transcript_end": "no sentence end"
+   },
+   "answer": "LIKELY_DONE"
+  },
+  {
+   "inputs": {
+    "caller_earlier": "can I tell you what happened last year?",
+    "caller_text": "So in March my father was admitted to the hospital.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "HOLDING"
+  },
+  {
+   "inputs": {
+    "agent_question": "Is there anything else I can help with?",
+    "caller_text": "No, that's all, thank you so much.",
+    "transcript_end": "a full stop"
+   },
+   "answer": "DONE"
+  }
+ ],
+ "deadline_ms": 400,
+ "default": "DONE"
+}

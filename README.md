@@ -159,7 +159,8 @@ session = AgentSession(..., turn_handling={"turn_detection": CueTurnDetector("ht
 ```
 
 It also adds Smart Turn on the caller's audio, a fallback for when Cue doesn't answer, and Cue-decided barge-in. The
-guide, with code for each: **[livekit-integration/](livekit-integration/README.md)**.
+guide, with code for each: **[livekit-integration/](livekit-integration/README.md)**. Step by step, from install to a cloud
+GPU: **[Quickstart](livekit-integration/README.md#quickstart)**.
 
 ## Benchmarks
 
@@ -280,6 +281,7 @@ The prompts are part of the model, and they ship inside the package (`cue/prompt
 | Prompt | Used by | Question |
 |---|---|---|
 | `end_of_turn_phone` | `end_of_turn` | End of turn, a caller and an agent (the eot-bench prompt, with 11 English examples) |
+| `end_of_turn_phone_greeting` | the LiveKit detector's default | The same prompt, except that a bare "Hello" or "Hi" counts as finished, so the agent replies to a greeting at once. All benchmarks used `end_of_turn_phone`; pass `end_of_turn=prompt("end_of_turn_phone")` to the detector to match them |
 | `end_of_turn_dialogue` | `dialogue_end_of_turn` | End of turn, two people talking |
 | `barge_in` | `barge_in` | Interruptions: STOP or CONTINUE while the agent is speaking |
 
