@@ -44,7 +44,7 @@ def running_server(llama):
 # -- prompts and inputs ----------------------------------------------------------------------------------------
 def test_the_prompts_ship_inside_the_package_and_load_by_name(tmp_path, monkeypatch):
     assert {p.stem for p in prompt("barge_in").parent.glob("*.json")} == {
-        "end_of_turn_phone", "end_of_turn_dialogue", "barge_in"}
+        "end_of_turn_phone", "end_of_turn_phone_greeting", "end_of_turn_dialogue", "barge_in"}
     assert load("end_of_turn_phone").ids == ("DONE", "LIKELY_DONE", "MID_THOUGHT", "HOLDING")
     monkeypatch.chdir(tmp_path)                          # an older path to a shipped prompt still works, from anywhere
     assert load("prompts/barge_in.json").ids == ("STOP", "CONTINUE")

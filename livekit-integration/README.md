@@ -18,7 +18,7 @@ There are two optional additions:
 Everything is in this folder, a separate package (`cue-livekit`, imported as `cue_livekit`) on top of the Cue client
 in the repo root. A complete agent with all three switches is in [`examples/livekit_agent.py`](examples/livekit_agent.py).
 
-Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**. Below, "she" is the agent and "the caller" is the person on the
+Tested on **livekit-agents 1.7.1, 1.8.1 and 1.8.7**; the unit tests and a console call also pass on 1.8.8. Below, "she" is the agent and "the caller" is the person on the
 line.
 
 ## 0. Install and serve Cue
