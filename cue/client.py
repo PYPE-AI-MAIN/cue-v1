@@ -11,9 +11,15 @@ letter, normalised over the options. Nothing is generated beyond that token.
     # {'STOP': 1.0, 'CONTINUE': 0.0}
 
 ``cue.ask(decision, inputs)`` asks any decision with its raw inputs.
+
+Each shipped prompt says how long an answer may take (``deadline_ms``) and what to answer when it is late
+(``default``). By default ``Cue`` keeps to both: a question the server does not answer within the deadline, or
+answers with an error or without an option letter, gets the prompt's default with probability 1.0, and
+``cue.last_fallback`` says why. ``Cue(..., strict=True)`` raises instead and waits up to ``timeout``.
 """
 from __future__ import annotations
 
+import asyncio
 import math
 import os
 from functools import lru_cache
@@ -56,30 +62,75 @@ def read(decision: Decision, response: dict) -> dict[str, float]:
     return {o: raw.get(o, 0.0) / mass for o in decision.ids}
 
 
+# what counts as "no answer": late, refused, an error status, or a reply with no option letter in it
+NO_ANSWER = (httpx.HTTPError, asyncio.TimeoutError, ValueError, KeyError, IndexError, TypeError)
+
+
+def fallback(decision: Decision) -> dict[str, float]:
+    """The decision's default answer, with probability 1.0."""
+    return {o: 1.0 if o == decision.default else 0.0 for o in decision.ids}
+
+
 class Cue:
     def __init__(self, base_url: str | None = None, model: str = "cue", api_key: str | None = None,
-                 timeout: float = 30.0) -> None:
+                 timeout: float = 30.0, *, strict: bool = False, deadline: float | None = None) -> None:
         """``base_url`` and ``api_key`` default to the CUE_URL and CUE_API_KEY environment variables, then to
-        http://localhost:8090/v1 and "x" (llama-server ignores the key unless it was started with one)."""
+        http://localhost:8090/v1 and "x" (llama-server ignores the key unless it was started with one).
+
+        ``strict=False`` (the default): each question gets its prompt's ``deadline_ms`` (or ``deadline`` seconds,
+        if given), and a question with no answer in time returns the prompt's ``default``. ``strict=True``: wait
+        up to ``timeout`` and raise on any failure."""
         base_url = base_url or os.environ.get("CUE_URL") or "http://localhost:8090/v1"
         api_key = api_key or os.environ.get("CUE_API_KEY") or "x"
         self.url = base_url.rstrip("/") + "/chat/completions"
         self.model = model
         self.headers = {"Authorization": f"Bearer {api_key}"}
         self.timeout = timeout
+        self.strict = strict
+        self.deadline = deadline
+        self.last_fallback: dict | None = None     # why the last question got its default, or None
         self._async: httpx.AsyncClient | None = None
 
+    def deadline_s(self, decision: Decision) -> float:
+        """Seconds a question may take: ``timeout`` when strict, else ``deadline`` or the prompt's deadline_ms."""
+        if self.strict:
+            return self.timeout
+        if self.deadline is not None:
+            return self.deadline
+        return decision.deadline_ms / 1000 if decision.deadline_ms else self.timeout
+
+    def _fell_back(self, decision: Decision, error: BaseException) -> dict[str, float]:
+        self.last_fallback = {"decision": decision.name, "default": decision.default,
+                              "reason": type(error).__name__, "deadline_s": self.deadline_s(decision)}
+        return fallback(decision)
+
     def ask(self, decision: Decision, inputs: dict) -> dict[str, float]:
-        r = httpx.post(self.url, json=body(decision, inputs, self.model), headers=self.headers, timeout=self.timeout)
-        r.raise_for_status()
-        return read(decision, r.json())
+        self.last_fallback = None
+        try:
+            r = httpx.post(self.url, json=body(decision, inputs, self.model), headers=self.headers,
+                           timeout=self.deadline_s(decision))
+            r.raise_for_status()
+            return read(decision, r.json())
+        except NO_ANSWER as e:
+            if self.strict:
+                raise
+            return self._fell_back(decision, e)
 
     async def aask(self, decision: Decision, inputs: dict) -> dict[str, float]:
+        self.last_fallback = None
         if self._async is None:
             self._async = httpx.AsyncClient(timeout=self.timeout)
-        r = await self._async.post(self.url, json=body(decision, inputs, self.model), headers=self.headers)
-        r.raise_for_status()
-        return read(decision, r.json())
+        limit = self.deadline_s(decision)
+        try:
+            # wait_for bounds the whole request; httpx's own timeout only bounds each phase of it
+            r = await asyncio.wait_for(self._async.post(self.url, json=body(decision, inputs, self.model),
+                                                        headers=self.headers, timeout=limit), limit)
+            r.raise_for_status()
+            return read(decision, r.json())
+        except NO_ANSWER as e:
+            if self.strict:
+                raise
+            return self._fell_back(decision, e)
 
     async def aclose(self) -> None:
         if self._async is not None:
