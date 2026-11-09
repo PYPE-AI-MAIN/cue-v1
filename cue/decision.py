@@ -40,6 +40,7 @@ class Decision:
     default: str = ""
     version: str = ""                                          # a hash of what the model sees
     context: tuple[str, ...] = ()                              # inputs left out of the worked examples
+    deadline_ms: int | None = None                             # how long an answer may take; then ``default``
 
     @property
     def ids(self) -> tuple[str, ...]:
@@ -70,6 +71,10 @@ def parse(d: dict) -> Decision:
     default = d.get("default") or ids[-1]
     if default not in ids:
         raise ValueError(f"{d['name']}: default {default!r} is not an option")
+    deadline_ms = d.get("deadline_ms")
+    if deadline_ms is not None and (isinstance(deadline_ms, bool) or not isinstance(deadline_ms, int)
+                                    or deadline_ms <= 0):
+        raise ValueError(f"{d['name']}: deadline_ms must be a positive integer, got {deadline_ms!r}")
     examples = []
     for ex in d.get("examples", []):
         if ex["answer"] not in ids:
@@ -77,7 +82,7 @@ def parse(d: dict) -> Decision:
         examples.append(({k: str(v) for k, v in ex["inputs"].items()}, ex["answer"]))
     return Decision(name=d["name"], instruction=d["instruction"].strip(), options=options,
                     inputs=tuple(d.get("inputs", ())), examples=tuple(examples), default=default,
-                    version=version_of(d), context=tuple(d.get("context", ())))
+                    version=version_of(d), context=tuple(d.get("context", ())), deadline_ms=deadline_ms)
 
 
 # the three prompts Cue v1 was trained on, shipped inside the package

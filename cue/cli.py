@@ -46,7 +46,7 @@ def _connect(url: str | None, model: str = "cue", api_key: str | None = None) ->
         if served and not any("cue" in Path(m).name.lower() for m in served):      # the file or served name
             print(f"Note: the server at {target} serves {', '.join(served)}, which does not look like Cue v1.",
                   file=sys.stderr)
-        return Cue(target, model, api_key or "x"), None
+        return Cue(target, model, api_key or "x", strict=True), None
     if url:
         raise SystemExit(f"No Cue server answers at {url}.")
     if state == "other":
@@ -54,7 +54,7 @@ def _connect(url: str | None, model: str = "cue", api_key: str | None = None) ->
     print(f"No Cue server at {DEFAULT_URL}: starting one for this run (the first time downloads the model, about "
           "8 GB). To ask many questions, run `cue serve` in another terminal.", file=sys.stderr)
     server = Server().start()
-    return Cue(server.url), server
+    return Cue(server.url, strict=True), server
 
 
 def _show(probs: dict[str, float], *, end_of_turn: bool) -> None:

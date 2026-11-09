@@ -134,7 +134,7 @@ class CueTurnDetector:
                  threshold: float = 0.5, smart_turn: Any = None, timeout: float = 1.0, languages: Any = None,
                  punctuated: bool = True, graded_waits: bool = False, fallback: Any = None,
                  chars_per_s: float = 14.0, stop_without_answer: int = 3, keepalive_s: float = 60.0) -> None:
-        self.cue = Cue(base_url, model, api_key, timeout=max(timeout, 1.0) + 1.0)
+        self.cue = Cue(base_url, model, api_key, timeout=max(timeout, 1.0) + 1.0, strict=True)   # its own fallbacks
         # keep the connection between decisions: httpx drops an idle one after 5 s, and a caller's turns are further
         # apart than that (measured over TLS: 141 ms a decision on a new connection, 67 ms on a kept one)
         self.cue._async = httpx.AsyncClient(timeout=self.cue.timeout, limits=httpx.Limits(keepalive_expiry=keepalive_s))
